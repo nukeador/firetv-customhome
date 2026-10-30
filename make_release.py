@@ -24,11 +24,13 @@ with tempfile.TemporaryDirectory(prefix='firetv-release-') as temp:
     folder = Path(temp) / 'firetv-customhome'
     folder.mkdir()
     shutil.copy2(binary, folder / binary.name)
-    for name in ('README.md', 'LEEME.es.md', 'PRIVACY.md'):
+    for name in ('README.md', 'LEEME.es.md', 'PRIVACY.md', 'LICENSE'):
         shutil.copy2(ROOT / name, folder / name)
     (folder / 'docs').mkdir()
-    for name in ('GHOSTLOCK-PROVENANCE.md', 'home-only-source.patch'):
+    for name in ('GHOSTLOCK-PROVENANCE.md', 'home-only-source.patch', 'DEVELOPMENT.md', 'THIRD-PARTY-NOTICES.md'):
         shutil.copy2(ROOT / 'docs' / name, folder / 'docs' / name)
+    (folder / 'docs' / 'images').mkdir()
+    shutil.copy2(ROOT / 'docs' / 'images' / 'home.png', folder / 'docs' / 'images' / 'home.png')
     licenses = folder / 'licenses'
     licenses.mkdir()
     shutil.copy2(ROOT / 'LICENSE', licenses / 'AGPL-3.0.txt')
