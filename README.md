@@ -20,6 +20,8 @@ A simple Fire TV home screen with Stremio’s Continue Watching, SmartTube recom
 5. Use the arrow keys and Enter to choose a task, then follow the questions on your computer. When the TV asks **Allow USB debugging?**, accept with the remote. The installer lets you choose which apps to install and what to clean up.
 6. Sign in to your own accounts. Connect Stremio using the shortcut at the end of the app list. If SmartTube recommendations are missing, open SmartTube Beta and enable its channel service.
 
+Choose **Clean up Amazon apps** from the menu to run cleanup on its own. On the third-generation Stick, this option has not yet been tested on a physical device.
+
 You can run the installer again after an interruption: it shows what is already installed and lets you choose each step. The SmartTube bridge can be installed before SmartTube.
 
 Hold **OK** on an app to rearrange it. Press **Menu** on an app to open its settings. Existing launcher settings and app order are preserved; on a new installation you can arrange the apps yourself.

@@ -73,6 +73,51 @@ class Tests(unittest.TestCase):
             cleanup.restore(dev, path)
             self.assertEqual(dev.disabled, {'com.amazon.firebat'})
 
+    def test_sheldon_cleanup_is_available_and_preserves_sensitive_services(self):
+        import importlib
+        with patch('builtins.input', return_value='en'):
+            app = importlib.import_module('main')
+        class SheldonDevice:
+            def __init__(self): self.disabled=set(); self.calls=[]
+            def shell(self, command, timeout=60):
+                self.calls.append(command)
+                if command == 'pm list packages':
+                    return 'package:com.amazon.perfcollection\npackage:com.amazon.providers.contentsupport\npackage:com.amazon.tv.easyupgrade\n'
+                if command == 'pm list packages -d': return ''.join('package:'+x+'\n' for x in self.disabled)
+                if command.startswith('dumpsys package '): return '  versionCode=1021010 minSdk=22\n'
+                if command.startswith('pm disable-user --user 0 '): self.disabled.add(command.split()[-1]); return 'ok'
+                if command.startswith('pm enable --user 0 '): self.disabled.discard(command.split()[-1]); return 'ok'
+                return ''
+            def screenshot(self, target): Path(target).write_bytes(b'png')
+        props={'ro.product.model':'AFTSSS','ro.product.device':'sheldonp','ro.build.version.incremental':'0036408029828','ro.build.version.sdk':'28','ro.product.cpu.abi':'armeabi-v7a'}
+        with tempfile.TemporaryDirectory() as directory:
+            session=Path(directory); (session/'disabled.txt').write_text(''); dev=SheldonDevice()
+            with patch.object(app, 'ask', side_effect=[True, True, False]):
+                app.select_cleanup(dev, props, '4.4.162+', 'armv7l', session)
+            self.assertEqual(dev.disabled, {'com.amazon.perfcollection'})
+            self.assertTrue(any(x == 'dumpsys package com.amazon.perfcollection' for x in dev.calls))
+            self.assertNotIn('com.amazon.providers.contentsupport', dev.disabled)
+            self.assertNotIn('com.amazon.tv.easyupgrade', dev.disabled)
+            cleanup.restore(dev, session)
+
+    def test_cleanup_skips_a_protected_package_and_restores_only_changes(self):
+        class Protected(FakeDevice):
+            def shell(self, command, timeout=60):
+                if command == 'pm list packages':
+                    return 'package:com.amazon.perfcollection\npackage:com.amazon.tv.acr\n'
+                if command == 'pm disable-user --user 0 com.amazon.perfcollection':
+                    self.calls.append(command)
+                    return 'SecurityException: Cannot disable a protected package'
+                return super().shell(command, timeout)
+        with tempfile.TemporaryDirectory() as directory:
+            session=Path(directory); (session/'disabled.txt').write_text(''); dev=Protected()
+            journal=cleanup.disable(dev, ['com.amazon.perfcollection','com.amazon.tv.acr'], session, set(), lambda: True)
+            self.assertEqual(journal['refused'], ['com.amazon.perfcollection'])
+            self.assertEqual(journal['verified_disable'], ['com.amazon.tv.acr'])
+            self.assertNotIn('com.amazon.perfcollection', journal['intended_disable'])
+            cleanup.restore(dev, session)
+            self.assertEqual(dev.disabled, set())
+
     def test_stremio_picks_latest_tv_not_phone_or_beta(self):
         html = b'<a href="https://dl.strem.io/android/v1.9.0-androidTV/com.stremio.one-1.9.0-1-armeabi-v7a.apk">old</a><a href="https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-2-armeabi-v7a.apk">new</a><a href="https://dl.strem.io/android/v9.9.9/com.stremio.one-9-armeabi-v7a.apk">phone</a>'
         with patch.object(downloads, 'request', return_value=html):

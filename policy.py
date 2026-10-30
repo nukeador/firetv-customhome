@@ -1,4 +1,4 @@
-"""Conservative lists verified only on the documented AFTKA build."""
+"""Reviewed package candidates for specific Fire OS builds."""
 import re
 
 METRICS = ('com.amazon.client.metrics.api', 'com.amazon.tv.fw.metrics',
@@ -10,6 +10,20 @@ CONTENT = ('com.amazon.kso.blackbird', 'com.amazon.sneakpeek', 'com.amazon.hybri
 APPS = ('com.amazon.shoptv.client', 'com.amazon.shoptv.firetv.client',
         'com.amazon.bueller.photos', 'com.amazon.bueller.music', 'com.amazon.gamehub', 'com.amazon.firebat')
 ALLOW = frozenset(METRICS + CONTENT + APPS)
+
+# 5746 factory APK manifests reviewed offline. Keep content support (TTS),
+# account/migration services and Alexa-linked components enabled.
+SHELDON_METRICS = ('com.amazon.perfcollection', 'com.amazon.tv.acr')
+SHELDON_CONTENT = ('com.amazon.kso.blackbird', 'com.amazon.sneakpeek')
+SHELDON_FACTORY_VERSION = {
+    'com.amazon.dp.logger': 1069410, 'com.amazon.perfc': 1027010,
+    'com.amazon.perfcollection': 1021010, 'com.amazon.tv.acr': 100000210,
+    'com.amazon.kso.blackbird': 1900060010, 'com.amazon.sneakpeek': 1001310, 'com.amazon.shoptv.client': 3310,
+    'com.amazon.shoptv.firetv.client': 3210, 'com.amazon.bueller.photos': 101317010,
+    'com.amazon.bueller.music': 101000000, 'com.amazon.gamehub': 2910,
+    'com.amazon.firebat': 1039310,
+}
+
 
 
 def matches_identity(props, kernel, machine):

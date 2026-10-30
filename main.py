@@ -19,7 +19,8 @@ from device import Device, packages
 from downloads import fetch
 import home
 import rootpatch
-from policy import APPS, CONTENT, METRICS, matches_identity, matches_sheldon_5746, parse_getprop
+from policy import (APPS, CONTENT, METRICS, SHELDON_METRICS, SHELDON_CONTENT,
+                    SHELDON_FACTORY_VERSION, matches_identity, matches_sheldon_5746, parse_getprop)
 
 ASSETS = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent)) / 'assets'
 STATE = Path(os.environ.get('LOCALAPPDATA') or os.environ.get('XDG_STATE_HOME') or Path.home() / '.local' / 'state') / 'firetv-customhome'
@@ -268,18 +269,26 @@ def install_upstream(device, kind, abi, session, sdk, abis):
 
 
 def select_cleanup(device, props, kernel, machine, session):
-    if not matches_identity(props, kernel, machine):
-        print(t('La limpieza automática solo está revisada para el firmware AFTKA exacto; se omitirá.',
-                'Automatic cleanup is only reviewed for the exact AFTKA firmware; it will be skipped.'))
+    sheldon = matches_sheldon_5746(props, kernel, machine)
+    if not sheldon and not matches_identity(props, kernel, machine):
+        print(t('Modelo o firmware sin lista de limpieza revisada; se omitirá.',
+                'No reviewed cleanup list for this model or firmware; skipping.'))
         return
+    installed = packages(device.shell('pm list packages'))
     chosen = []
+    keep_voice = sheldon and any(package in installed for package in SHELDON_CONTENT) and ask('¿Usas Alexa o el dictado por voz?', 'Do you use Alexa or voice dictation?', default=True)
     for title_es, title_en, group in (
-        ('telemetría y métricas', 'telemetry and metrics', METRICS),
-        ('publicidad y servicios de contenido de Amazon', 'Amazon advertising and content services', CONTENT)):
-        print('\n' + t(title_es, title_en) + ': ' + ', '.join(group))
+        ('telemetría y métricas', 'telemetry and metrics', SHELDON_METRICS if sheldon else METRICS),
+        ('publicidad y servicios de contenido de Amazon', 'Amazon advertising and content services', SHELDON_CONTENT if sheldon else CONTENT)):
+        present = [package for package in group if package in installed and not (sheldon and keep_voice and package in SHELDON_CONTENT)]
+        if not present:
+            continue
+        print('\n' + t(title_es, title_en) + ': ' + ', '.join(present))
         if ask('¿Desactivar estos componentes?', 'Disable these components?'):
-            chosen.extend(group)
+            chosen.extend(present)
     for package in APPS:
+        if package not in installed:
+            continue
         label = APP_LABELS[package]
         if ask('¿Desactivar ' + label + '?', 'Disable ' + label + '?'):
             chosen.append(package)
@@ -289,10 +298,23 @@ def select_cleanup(device, props, kernel, machine, session):
             print(t('Se ha guardado una captura en la carpeta de copia; comprueba la pantalla y el mando.',
                     'A screenshot is saved in the backup folder; check the screen and remote.'))
             return ask('¿Continuar con la limpieza?', 'Continue cleanup?', default=True)
-        disable(device, chosen, session, before, next_batch)
-    if ask('¿Eliminar también actualizaciones y datos de apps de Amazon seleccionadas? Sus datos se perderán.',
+        def review_dump(package, dump):
+            if not sheldon:
+                return True
+            match = re.search(r'(?m)^\s*versionCode=(\d+)', dump)
+            expected = SHELDON_FACTORY_VERSION.get(package)
+            if not match or expected is None:
+                print(t('No se puede identificar la versión de ', 'Cannot identify the version of ') + package + t('; se conserva.', '; keeping it.'))
+                return False
+            if int(match.group(1)) != expected:
+                print(t('Esta aplicación está actualizada y puede tener funciones distintas: ', 'This app is updated and may have different functions: ') + package)
+                return ask('¿Desactivarla de todos modos?', 'Disable it anyway?')
+            return True
+        disable(device, chosen, session, before, next_batch, review_dump=review_dump)
+    if chosen and ask('¿Eliminar también actualizaciones y datos de apps de Amazon seleccionadas? Sus datos se perderán.',
            'Also remove updates and data for selected Amazon apps? Their data will be lost.'):
-        for package in [p for p in APPS if p in chosen]:
+        journal = json.loads((session / 'changes.json').read_text(encoding='utf-8'))
+        for package in [p for p in APPS if p in journal.get('verified_disable', [])]:
             if ask('¿Eliminar actualización y datos de ' + APP_LABELS[package] + '?', 'Remove update and data for ' + APP_LABELS[package] + '?'):
                 remove_update_and_data(device, package, session)
                 try:

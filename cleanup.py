@@ -13,7 +13,7 @@ def save_journal(path, journal):
     temporary.replace(path)
 
 
-def disable(device, selected, session, original_disabled, confirm_batch):
+def disable(device, selected, session, original_disabled, confirm_batch, review_dump=None):
     validate_packages(selected)
     session = Path(session)
     journal_path = session / 'changes.json'
@@ -22,6 +22,8 @@ def disable(device, selected, session, original_disabled, confirm_batch):
     current = packages(device.shell('pm list packages -d'))
     batch_size = 0
     screenshot_number = 0
+    refused = []
+    changed = 0
     def finish_batch():
         nonlocal batch_size, screenshot_number
         if not batch_size:
@@ -37,20 +39,33 @@ def disable(device, selected, session, original_disabled, confirm_batch):
     for package in selected:
         if package not in installed or package in original_disabled or package in current:
             continue
-        (session / (package + '-before.txt')).write_text(device.shell('dumpsys package ' + package), encoding='utf-8')
+        dump = device.shell('dumpsys package ' + package)
+        (session / (package + '-before.txt')).write_text(dump, encoding='utf-8')
+        if review_dump is not None and not review_dump(package, dump):
+            continue
         if package not in journal['intended_disable']:
             journal['intended_disable'].append(package)
             save_journal(journal_path, journal)
         result = device.shell('pm disable-user --user 0 ' + package)
         current = packages(device.shell('pm list packages -d'))
         if package not in current:
-            raise RuntimeError('Package manager refused disabling ' + package + ': ' + result.strip())
+            refused.append(package)
+            journal['intended_disable'].remove(package)
+            journal.setdefault('refused', []).append(package)
+            save_journal(journal_path, journal)
+            print('No se pudo desactivar / Could not disable: ' + package, flush=True)
+            if 'SecurityException' in result and 'protected package' not in result.lower():
+                raise RuntimeError('Package manager refused this operation: ' + result.strip())
+            continue
+        changed += 1
         journal['verified_disable'].append(package)
         save_journal(journal_path, journal)
         batch_size += 1
         if batch_size == 3:
             finish_batch()
     finish_batch()
+    if refused and not changed:
+        raise RuntimeError('Package manager refused all selected packages; no cleanup was applied')
     return journal
 
 
