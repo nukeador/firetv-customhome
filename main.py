@@ -159,8 +159,11 @@ def install_launcher(device, session, sdk, abis):
 
 
 def install_upstream(device, kind, abi, session, sdk, abis):
-    print(t('Buscando la descarga oficial de ', 'Finding the official download for ') + kind + '…')
-    path, url, digest = fetch(kind, abi, session / 'downloads')
+    print(t('Descargando ', 'Downloading ') + kind + t(' desde su fuente oficial…', ' from its official source…'), flush=True)
+    def show_progress(size):
+        print(t('Descargados: ', 'Downloaded: ') + str(size // (1024 * 1024)) + ' MB', flush=True)
+    path, url, digest = fetch(kind, abi, session / 'downloads', progress=show_progress)
+    print(t('Comprobando e instalando ', 'Checking and installing ') + kind + '…', flush=True)
     expected = {'stremio': 'com.stremio.one', 'smarttube': 'org.smarttube.beta', 'usque': 'io.github.georgexie2333.usque'}[kind]
     check_apk(path, expected, sdk, abis)
     (session / (kind + '-download.json')).write_text(json.dumps({'url': url, 'sha256': digest}, indent=2), encoding='utf-8')

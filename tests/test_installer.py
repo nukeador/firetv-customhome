@@ -121,6 +121,16 @@ class Tests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 downloads.github_release('yuliskov/SmartTube', 'smarttube', 'armeabi-v7a')
 
+    def test_smarttube_uses_direct_official_download_and_checks_signer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(downloads, 'request', return_value=b'apk') as request, \
+                 patch.object(downloads, 'verify') as verify, \
+                 patch.object(downloads, 'github_release', side_effect=AssertionError('API must not be used')):
+                path, url, _ = downloads.fetch('smarttube', 'armeabi-v7a', directory)
+                self.assertEqual(url, downloads.SMARTTUBE_BETA_URL)
+                request.assert_called_once_with(downloads.SMARTTUBE_BETA_URL, 250 * 1024 * 1024, progress=None)
+                verify.assert_called_once_with(path, downloads.SMARTTUBE_CERT)
+
     def test_binary_patch_and_hash(self):
         def n(x):
             return int(x).to_bytes(8, 'little')

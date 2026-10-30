@@ -8,6 +8,8 @@ import urllib.request
 from pathlib import Path
 from apkverify import verify
 
+SMARTTUBE_BETA_URL = 'https://github.com/yuliskov/SmartTube/releases/download/latest/smarttube_beta.apk'
+SMARTTUBE_CERT = '109735aa24fe85e2e1623ebb3b1ecc4bf4263f4c6374e4411d646bfa2eda482a'
 STREMIO_CERT = '7e6a979c968f771e3fbcf2c2e8718ce61e708d87caf91fc13e2d4c19a8022c6b'
 USQUE_CERT = '087cce9ace990b160204908a44c3e73808c5567685cf1b9cf0ae3ad033f9901a'
 AGENT = {'User-Agent': 'FireTV-setup/1.0', 'Accept': 'application/vnd.github+json'}
@@ -27,14 +29,23 @@ def check_url(url):
         raise ValueError('Untrusted download URL')
 
 
-def request(url, limit=4 * 1024 * 1024):
+def request(url, limit=4 * 1024 * 1024, progress=None):
     check_url(url)
     opener = urllib.request.build_opener(RestrictedRedirect())
     with opener.open(urllib.request.Request(url, headers=AGENT), timeout=30) as response:
-        data = response.read(limit + 1)
-    if len(data) > limit:
-        raise ValueError('Download exceeds size limit')
-    return data
+        chunks, size, last_report = [], 0, 0
+        while True:
+            chunk = response.read(min(256 * 1024, limit + 1 - size))
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > limit:
+                raise ValueError('Download exceeds size limit')
+            chunks.append(chunk)
+            if progress and size - last_report >= 5 * 1024 * 1024:
+                progress(size)
+                last_report = size
+    return b''.join(chunks)
 
 
 class Links(html.parser.HTMLParser):
@@ -81,25 +92,27 @@ def github_release(repo, kind, abi):
     raise ValueError('No official release with published SHA-256 for this ABI')
 
 
-def fetch(kind, abi, directory):
+def fetch(kind, abi, directory, progress=None):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     if kind == 'stremio':
         url, expected = stremio_url(abi), None
     elif kind == 'smarttube':
-        url, expected = github_release('yuliskov/SmartTube', kind, abi)
+        url, expected = SMARTTUBE_BETA_URL, None
     elif kind == 'usque':
         url, expected = github_release('GeorgeXie2333/usque-app', kind, abi)
     else:
         raise ValueError('Unknown app')
-    data = request(url, 250 * 1024 * 1024)
+    data = request(url, 250 * 1024 * 1024, progress=progress)
     actual = hashlib.sha256(data).hexdigest()
     if expected and actual != expected:
         raise ValueError('Published APK SHA-256 does not match')
     path = directory / (kind + '.apk')
     path.write_bytes(data)
     try:
-        if kind == 'stremio':
+        if kind == 'smarttube':
+            verify(path, SMARTTUBE_CERT)
+        elif kind == 'stremio':
             verify(path, STREMIO_CERT)
         elif kind == 'usque':
             verify(path, USQUE_CERT)
