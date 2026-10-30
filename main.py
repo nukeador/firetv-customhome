@@ -119,6 +119,22 @@ def read_identity(device):
     return props, kernel, machine
 
 
+def show_compatibility(device, props, kernel, machine):
+    print(t('Datos de compatibilidad (no modifican la TV):', 'Compatibility information (no TV changes):'))
+    for label, value in (
+        ('Modelo / Model', props.get('ro.product.model', '?')),
+        ('Dispositivo / Device', props.get('ro.product.device', '?')),
+        ('Compilacion / Build', props.get('ro.build.version.incremental', '?')),
+        ('Firmware', props.get('ro.build.display.id', '?')),
+        ('Kernel', kernel), ('Arquitectura / Architecture', machine),
+        ('Kernel version', device.shell('cat /proc/version').strip()),
+        ('SELinux', device.shell('getenforce').strip()),
+    ):
+        print(label + ': ' + value)
+    print(t('Puedes hacer una foto de esta pantalla. No incluye tu cuenta ni el número de serie.',
+            'You can photograph this screen. It does not include your account or serial number.'))
+
+
 def check_apk(path, package, sdk, abis):
     meta = inspect_apk(path)
     if meta['package'] != package or meta['min_sdk'] > sdk:
@@ -251,7 +267,8 @@ def main():
         print(t('Comprobación local correcta; no se ha conectado a ninguna TV.',
                 'Local self-check passed; no TV connection was made.'))
         return
-    if not args.restore and ask('¿Quieres restaurar una limpieza anterior?', 'Do you want to restore a previous cleanup?'):
+    diagnose = not args.restore and ask('¿Solo comprobar la compatibilidad de este Fire TV?', 'Only check this Fire TV compatibility?')
+    if not diagnose and not args.restore and ask('¿Quieres restaurar una limpieza anterior?', 'Do you want to restore a previous cleanup?'):
         backups = sorted((STATE / 'backups').glob('*/identity.json'), reverse=True)
         if not backups:
             raise RuntimeError(t('No hay copias guardadas en este ordenador.', 'No backups were found on this computer.'))
@@ -271,6 +288,10 @@ def main():
         props, kernel, machine = read_identity(device)
         print(t('Dispositivo: ', 'Device: ') + props.get('ro.product.model', '?') + ' / ' + props.get('ro.build.version.incremental', '?'))
         serial = props.get('ro.serialno', '')
+        if diagnose:
+            show_compatibility(device, props, kernel, machine)
+            input(t('Pulsa Intro para salir: ', 'Press Enter to exit: '))
+            return
         if args.restore:
             session = Path(args.restore)
             saved = json.loads((session / 'identity.json').read_text(encoding='utf-8'))
