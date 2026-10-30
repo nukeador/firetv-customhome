@@ -50,11 +50,18 @@ class Device:
                 last_percent[0] = percent
                 print('Fire TV: ' + str(percent) + '%', flush=True)
 
+        transferred = [0]
+        def direct_progress(_path, chunk_size, total):
+            transferred[0] += chunk_size
+            show_progress(transferred[0], total)
+
         try:
             self.client.push(str(source), destination,
-                             progress_callback=lambda _, done, total: show_progress(done, total),
+                             progress_callback=direct_progress,
                              transport_timeout_s=20, read_timeout_s=20)
-        except Exception:
+        except Exception as error:
+            detail = str(error).replace('\n', ' ').replace('\r', ' ')[:200]
+            print('ADB: ' + type(error).__name__ + (': ' + detail if detail else ''), flush=True)
             print('ADB: transferencia alternativa / alternate transfer', flush=True)
             self.close()
             self.connect()
@@ -62,8 +69,8 @@ class Device:
             self.shell('printf %s "" > ' + shlex.quote(tmp))
             encoded = base64.b64encode(data).decode('ascii')
             last_percent[0] = -5
-            for offset in range(0, len(encoded), 16384):
-                chunk = encoded[offset:offset + 16384]
+            for offset in range(0, len(encoded), 49152):
+                chunk = encoded[offset:offset + 49152]
                 self.shell('printf %s ' + shlex.quote(chunk) + ' >> ' + shlex.quote(tmp))
                 show_progress(offset + len(chunk), len(encoded))
             self.shell('base64 -d ' + shlex.quote(tmp) + ' > ' + shlex.quote(destination), timeout=120)

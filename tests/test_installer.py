@@ -164,6 +164,30 @@ class Tests(unittest.TestCase):
             with patch.object(dev, 'shell', return_value='bad file'):
                 with self.assertRaises(RuntimeError): dev.push(path, '/data/local/tmp/file.apk')
 
+    def test_push_reports_accumulated_chunks_and_batches_fallback(self):
+        import io
+        from contextlib import redirect_stdout
+        data = b'x' * 100000
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'file.apk'; path.write_bytes(data)
+            dev = device.Device.__new__(device.Device)
+            class Chunked:
+                def push(self, src, dst, **kwargs):
+                    for _ in range(4): kwargs['progress_callback'](dst, 25000, 100000)
+            dev.client = Chunked()
+            output = io.StringIO()
+            with patch.object(dev, 'shell', return_value=hashlib.md5(data).hexdigest() + '  file'), redirect_stdout(output):
+                dev.push(path, '/data/local/tmp/file.apk')
+            for percent in (25, 50, 75, 100): self.assertIn('Fire TV: ' + str(percent) + '%', output.getvalue())
+            class Failing:
+                def push(self, *args, **kwargs): raise TimeoutError('sync stalled')
+            dev.client = Failing()
+            with patch.object(dev, 'shell', return_value=hashlib.md5(data).hexdigest() + '  file') as shell, \
+                 patch.object(dev, 'close'), patch.object(dev, 'connect'), redirect_stdout(io.StringIO()):
+                dev.push(path, '/data/local/tmp/file.apk')
+            appends = [c.args[0] for c in shell.call_args_list if c.args[0].startswith('printf %s ') and ' >> ' in c.args[0]]
+            self.assertEqual(len(appends), 3)
+
     def test_usque_uses_latest_release_redirect_without_github_api(self):
         from unittest.mock import MagicMock
         response = MagicMock()
