@@ -131,6 +131,27 @@ class Tests(unittest.TestCase):
                 request.assert_called_once_with(downloads.SMARTTUBE_BETA_URL, 250 * 1024 * 1024, progress=None)
                 verify.assert_called_once_with(path, downloads.SMARTTUBE_CERT)
 
+    def test_file_transfer_checks_checksum_and_recovers_from_sync_failure(self):
+        class Client:
+            def __init__(self, fail): self.fail = fail
+            def push(self, source, destination, **kwargs):
+                if self.fail: raise TimeoutError('sync stalled')
+                kwargs['progress_callback'](destination, 3, 3)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'file.apk'
+            path.write_bytes(b'abc')
+            for fails in (False, True):
+                dev = device.Device.__new__(device.Device)
+                dev.client = Client(fails)
+                with patch.object(dev, 'close') as close, patch.object(dev, 'connect') as reconnect, \
+                     patch.object(dev, 'shell', return_value=hashlib.md5(b'abc').hexdigest() + '  file') as shell:
+                    dev.push(path, '/data/local/tmp/file.apk')
+                    self.assertEqual(reconnect.called, fails)
+                    self.assertTrue(any(c.args[0].startswith('md5sum ') for c in shell.call_args_list))
+            dev.client = Client(False)
+            with patch.object(dev, 'shell', return_value='bad file'):
+                with self.assertRaises(RuntimeError): dev.push(path, '/data/local/tmp/file.apk')
+
     def test_binary_patch_and_hash(self):
         def n(x):
             return int(x).to_bytes(8, 'little')

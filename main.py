@@ -167,6 +167,7 @@ def install_upstream(device, kind, abi, session, sdk, abis):
     expected = {'stremio': 'com.stremio.one', 'smarttube': 'org.smarttube.beta', 'usque': 'io.github.georgexie2333.usque'}[kind]
     check_apk(path, expected, sdk, abis)
     (session / (kind + '-download.json')).write_text(json.dumps({'url': url, 'sha256': digest}, indent=2), encoding='utf-8')
+    print(t('Enviando al Fire TV…', 'Sending to Fire TV…'), flush=True)
     device.install(path, kind)
     path.unlink(missing_ok=True)
     try:
