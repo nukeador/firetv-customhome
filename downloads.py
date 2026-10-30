@@ -76,6 +76,21 @@ def stremio_url(abi):
     return max(candidates)[1]
 
 
+def usque_url(abi):
+    if abi not in ('armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'):
+        raise ValueError('Unsupported Usque architecture')
+    url = 'https://github.com/GeorgeXie2333/usque-app/releases/latest'
+    opener = urllib.request.build_opener(RestrictedRedirect())
+    with opener.open(urllib.request.Request(url, headers=AGENT, method='HEAD'), timeout=30) as response:
+        final_url = response.geturl()
+    check_url(final_url)
+    match = re.fullmatch(r'https://github\.com/GeorgeXie2333/usque-app/releases/tag/(v[0-9]+(?:\.[0-9]+){2})', final_url)
+    if not match:
+        raise ValueError('Unexpected official Usque release URL')
+    tag = match.group(1)
+    return 'https://github.com/GeorgeXie2333/usque-app/releases/download/' + tag + '/usque-' + tag + '-android-' + abi + '.apk'
+
+
 def github_release(repo, kind, abi):
     releases = json.loads(request('https://api.github.com/repos/' + repo + '/releases?per_page=50'))
     for release in releases:
@@ -100,7 +115,7 @@ def fetch(kind, abi, directory, progress=None):
     elif kind == 'smarttube':
         url, expected = SMARTTUBE_BETA_URL, None
     elif kind == 'usque':
-        url, expected = github_release('GeorgeXie2333/usque-app', kind, abi)
+        url, expected = usque_url(abi), None
     else:
         raise ValueError('Unknown app')
     data = request(url, 250 * 1024 * 1024, progress=progress)

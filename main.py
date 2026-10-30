@@ -268,7 +268,8 @@ def main():
                 'Local self-check passed; no TV connection was made.'))
         return
     diagnose = not args.restore and ask('¿Solo comprobar la compatibilidad de este Fire TV?', 'Only check this Fire TV compatibility?')
-    if not diagnose and not args.restore and ask('¿Quieres restaurar una limpieza anterior?', 'Do you want to restore a previous cleanup?'):
+    usque_only = not diagnose and not args.restore and ask('¿Instalar solo Usque (VPN)?', 'Install only Usque (VPN)?')
+    if not diagnose and not usque_only and not args.restore and ask('¿Quieres restaurar una limpieza anterior?', 'Do you want to restore a previous cleanup?'):
         backups = sorted((STATE / 'backups').glob('*/identity.json'), reverse=True)
         if not backups:
             raise RuntimeError(t('No hay copias guardadas en este ordenador.', 'No backups were found on this computer.'))
@@ -351,6 +352,20 @@ def main():
         sdk = int(props.get('ro.build.version.sdk', '0'))
         abi = props.get('ro.product.cpu.abi', '')
         abis = {item.strip() for item in props.get('ro.product.cpu.abilist', abi).split(',') if item.strip()}
+        if usque_only:
+            if abi not in ('armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'):
+                raise RuntimeError(t('Arquitectura no compatible con Usque.', 'Unsupported Usque architecture.'))
+            install_upstream(device, 'usque', abi, session, sdk, abis)
+            if 'com.gathin.tvhome' in packages(device.shell('pm list packages')):
+                print(t('Para desconectar la VPN desde Home, concede acceso a notificaciones al launcher.',
+                        'To disconnect VPN from Home, grant notification access to the launcher.'))
+                if ask('¿Conceder acceso a notificaciones?', 'Grant notification access?'):
+                    device.shell('cmd notification allow_listener com.gathin.tvhome/.UsqueNotificationListener')
+                    listeners = device.shell('settings get secure enabled_notification_listeners')
+                    if 'com.gathin.tvhome.UsqueNotificationListener' not in listeners:
+                        print(t('No se pudo verificar el permiso.', 'The permission could not be verified.'))
+            finish_adb(device, host, port, wired)
+            return
         installed = packages(device.shell('pm list packages'))
         status_apps = (('Launcher', 'com.gathin.tvhome'), ('SmartTube bridge', 'com.tv.leanback.launcher'),
                        ('SmartTube Beta', 'org.smarttube.beta'), ('Stremio', 'com.stremio.one'),

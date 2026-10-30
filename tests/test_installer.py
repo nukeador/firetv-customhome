@@ -164,6 +164,16 @@ class Tests(unittest.TestCase):
             with patch.object(dev, 'shell', return_value='bad file'):
                 with self.assertRaises(RuntimeError): dev.push(path, '/data/local/tmp/file.apk')
 
+    def test_usque_uses_latest_release_redirect_without_github_api(self):
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.__enter__.return_value.geturl.return_value = 'https://github.com/GeorgeXie2333/usque-app/releases/tag/v0.3.3'
+        opener = MagicMock()
+        opener.open.return_value = response
+        with patch.object(downloads.urllib.request, 'build_opener', return_value=opener):
+            url = downloads.usque_url('armeabi-v7a')
+        self.assertEqual(url, 'https://github.com/GeorgeXie2333/usque-app/releases/download/v0.3.3/usque-v0.3.3-android-armeabi-v7a.apk')
+
     def test_binary_patch_and_hash(self):
         def n(x):
             return int(x).to_bytes(8, 'little')
