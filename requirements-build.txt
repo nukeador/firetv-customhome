@@ -1,0 +1,5 @@
+adb-shell==0.4.4
+cryptography==50.0.2
+rsa==4.9.1
+pyasn1==0.6.4
+pyinstaller==6.16.0

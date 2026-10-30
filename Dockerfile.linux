@@ -1,0 +1,5 @@
+FROM python:3.11.13-slim-bullseye@sha256:9e25f400253a5fa3191813d6a67eb801ca1e6f012b3bd2588fa6920b59e3eba6
+WORKDIR /src
+RUN apt-get update && apt-get install -y --no-install-recommends binutils && rm -rf /var/lib/apt/lists/*
+COPY requirements-build.txt /tmp/requirements-build.txt
+RUN python -m pip install --no-cache-dir -r /tmp/requirements-build.txt

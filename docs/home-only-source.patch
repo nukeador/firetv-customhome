@@ -1,0 +1,200 @@
+diff --git a/kara/src/kara_ghostlock.c b/kara/src/kara_ghostlock.c
+index 59834e7..a7d4313 100644
+--- a/kara/src/kara_ghostlock.c
++++ b/kara/src/kara_ghostlock.c
+@@ -34,12 +34,9 @@
+ #define KARA_NR_FUTEX 240
+ #define KARA_NR_SCHED_SETATTR 380
+ #define KARA_SELECT_NFDS 320
+-#define KARA_LOG_PATH "/data/local/tmp/kara-ghostlock.log"
+-#define KARA_ROOT_PROOF "/data/local/tmp/kara-root-ready"
+-#define KARA_ROOT_SOCKET "/data/local/tmp/kara-root.sock"
+-#define KARA_OTA_QUARANTINE "/data/local/tmp/kara-ota-package.PS7713-held"
+-#define KARA_RECOVERY_COMMAND_HELD "/cache/recovery/command.kara-PS7713-held"
+-#define KARA_RECOVERY_BLOCKMAP_HELD "/cache/recovery/block.map.kara-PS7713-held"
++#define KARA_LOG_PATH "/data/local/tmp/kara-home-only.log"
++#define KARA_ROOT_PROOF "/data/local/tmp/kara-home-only-ready"
++#define KARA_ROOT_SOCKET "/data/local/tmp/kara-home-only.sock"
+ 
+ struct kara_old_timespec32 {
+     int32_t tv_sec;
+@@ -498,99 +495,12 @@ static void park_after_race(const char *reason) {
+         pause();
+ }
+ 
+-static int run_exec_logged(char *const argv[]) {
+-    klog("exec: %s %s %s %s %s", argv[0], argv[1] ? argv[1] : "",
+-         argv[2] ? argv[2] : "", argv[3] ? argv[3] : "",
+-         argv[4] ? argv[4] : "");
+-    pid_t child = fork();
+-    if (child < 0)
+-        return 0;
+-    if (child == 0) {
+-        setenv("PATH", "/system/bin:/system/xbin:/vendor/bin", 1);
+-        setenv("HOME", "/data/local/tmp", 1);
+-        if (setresgid(0, 0, 0) != 0 || setresuid(0, 0, 0) != 0)
+-            _exit(126);
+-        execv(argv[0], argv);
+-        _exit(127);
+-    }
+-    int status = 0;
+-    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {
+-    }
+-    int ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+-    klog("exec result: %s", ok ? "ok" : "FAILED");
+-    return ok;
+-}
+-
+-static int force_stop_package(const char *package) {
+-    char *const argv[] = {"/system/bin/am", "force-stop", (char *)package, NULL};
+-    return run_exec_logged(argv);
+-}
+-
+-static int disable_package(const char *package) {
+-    char *const argv[] = {"/system/bin/pm", "disable-user", "--user", "0",
+-                          (char *)package, NULL};
+-    return run_exec_logged(argv);
+-}
+-
+-static int package_is_disabled(const char *package) {
+-    char output[16384];
+-    char *const argv[] = {"/system/bin/pm", "list", "packages", "-d", NULL};
+-    if (!capture_exec(argv, output, sizeof(output)))
+-        return 0;
+-    char needle[256];
+-    snprintf(needle, sizeof(needle), "package:%s", package);
+-    return strstr(output, needle) != NULL;
+-}
+-
+-static int hold_path(const char *source, const char *destination) {
+-    struct stat source_st;
+-    if (lstat(source, &source_st) != 0)
+-        return errno == ENOENT;
+-    struct stat destination_st;
+-    if (lstat(destination, &destination_st) == 0) {
+-        klog("hold refused: both %s and %s exist", source, destination);
+-        return 0;
+-    }
+-    if (rename(source, destination) != 0) {
+-        klog("hold rename %s -> %s failed errno=%d", source, destination, errno);
+-        return 0;
+-    }
+-    klog("held %s at %s", source, destination);
+-    return 1;
+-}
+-
+-static int contain_ota(void) {
+-    static const char *const packages[] = {
+-        "com.amazon.device.software.ota",
+-        "com.amazon.device.software.ota.override",
+-        "com.amazon.tv.forcedotaupdater.v2",
+-    };
+-    int ok = 1;
+-
+-    /* Preserve and disarm already-staged reboot payloads first. */
+-    ok &= hold_path("/data/ota_package", KARA_OTA_QUARANTINE);
+-    ok &= hold_path("/cache/recovery/command", KARA_RECOVERY_COMMAND_HELD);
+-    ok &= hold_path("/cache/recovery/block.map", KARA_RECOVERY_BLOCKMAP_HELD);
+-    sync();
+-    klog("OTA staged-path quarantine synced before package-manager calls");
+-
+-    for (size_t i = 0; i < sizeof(packages) / sizeof(packages[0]); ++i)
+-        ok &= force_stop_package(packages[i]);
+-    for (size_t i = 0; i < sizeof(packages) / sizeof(packages[0]); ++i)
+-        ok &= disable_package(packages[i]);
+-
+-    char *const settings_argv[] = {"/system/bin/settings", "put", "global",
+-                                    "ota_disable_automatic_update", "1", NULL};
+-    ok &= run_exec_logged(settings_argv);
+-
+-    for (size_t i = 0; i < sizeof(packages) / sizeof(packages[0]); ++i) {
+-        int disabled = package_is_disabled(packages[i]);
+-        klog("OTA package %s disabled=%d", packages[i], disabled);
+-        ok &= disabled;
+-    }
+-    char *const sync_argv[] = {"/system/bin/sync", NULL};
+-    ok &= run_exec_logged(sync_argv);
+-    return ok;
++/* Local HOME-only adaptation: leave updater packages, settings and staged
++ * payloads untouched. No containment or updater mutation is performed here.
++ * A pending OTA must be reviewed before any future live attempt.
++ */
++static void preserve_ota_policy(void) {
++    klog("HOME_ONLY_POLICY: updater packages/settings/staged files untouched");
+ }
+ 
+ static int write_root_proof(void) {
+@@ -601,7 +511,7 @@ static int write_root_proof(void) {
+     char enforce[16] = "?";
+     (void)read_text_file("/proc/self/attr/current", context, sizeof(context));
+     (void)read_text_file("/sys/fs/selinux/enforce", enforce, sizeof(enforce));
+-    dprintf(fd, "ROOTED uid=%u euid=%u context=%s enforce=%s build=0035334210436\n",
++    dprintf(fd, "ROOTED uid=%u euid=%u context=%s enforce=%s build=0035334210436 policy=home-only-preserve-ota\n",
+             (unsigned)getuid(), (unsigned)geteuid(), context, enforce);
+     close(fd);
+     chmod(KARA_ROOT_PROOF, 0644);
+@@ -862,12 +772,8 @@ static int run_live(void) {
+     require_phase(&phase, KARA_PHASE_ROOT);
+     (void)write_root_proof();
+ 
+-    if (!contain_ota()) {
+-        klog("WARNING: root succeeded but OTA containment did not fully verify; "
+-             "retaining root daemon for manual repair");
+-        root_command_daemon();
+-    }
+-    require_phase(&phase, KARA_PHASE_OTA_CONTAINED);
++    preserve_ota_policy();
++    require_phase(&phase, KARA_PHASE_POLICY_PRESERVED);
+     (void)write_root_proof();
+     require_phase(&phase, KARA_PHASE_DAEMON_READY);
+     root_command_daemon();
+diff --git a/kara/src/kara_ghostlock.h b/kara/src/kara_ghostlock.h
+index e6b6e10..3ab894c 100644
+--- a/kara/src/kara_ghostlock.h
++++ b/kara/src/kara_ghostlock.h
+@@ -75,7 +75,7 @@ enum kara_phase {
+     KARA_PHASE_LDISC_BOUND,
+     KARA_PHASE_PERMISSIVE,
+     KARA_PHASE_ROOT,
+-    KARA_PHASE_OTA_CONTAINED,
++    KARA_PHASE_POLICY_PRESERVED,
+     KARA_PHASE_DAEMON_READY,
+ };
+ 
+diff --git a/kara/src/kara_ghostlock_v2.c b/kara/src/kara_ghostlock_v2.c
+index f60fd5c..e4126e7 100644
+--- a/kara/src/kara_ghostlock_v2.c
++++ b/kara/src/kara_ghostlock_v2.c
+@@ -2,7 +2,7 @@
+  * Corrected kara GhostLock assembly.
+  *
+  * The original implementation is included under v1-only symbol names so its
+- * preflight, root daemon, OTA containment, and command protocol stay shared.
++ * preflight, root daemon and command protocol stay shared. OTA mutation is removed.
+  * The live path below replaces the empty tty_ldiscs-overlap lock with the
+  * tested mm-slab reclaim anchor and replaces select() with the exact TCP MCAST
+  * full-waiter stamp.
+@@ -30,7 +30,7 @@
+ #define MCAST_JOIN_SOURCE_GROUP 46
+ #endif
+ 
+-#define KARA_V2_CONFIRMATION "RUN-KARA-PS7713-GHOSTLOCK-V2"
++#define KARA_V2_CONFIRMATION "RUN-KARA-PS7713-HOME-ONLY-V2"
+ 
+ static int g_v2_stamp_socket = -1;
+ static struct kara_reclaim_hold g_v2_reclaim;
+@@ -355,12 +355,8 @@ static int run_live_v2(void)
+     if (!restore_ldisc_global())
+         klog("WARNING: v2 retained fake ldisc globally; reclaim remains pinned");
+ 
+-    if (!contain_ota()) {
+-        klog("WARNING: v2 root succeeded but OTA containment did not fully verify; "
+-             "retaining root daemon for manual repair");
+-        root_command_daemon();
+-    }
+-    require_phase(&phase, KARA_PHASE_OTA_CONTAINED);
++    preserve_ota_policy();
++    require_phase(&phase, KARA_PHASE_POLICY_PRESERVED);
+     (void)write_root_proof();
+     require_phase(&phase, KARA_PHASE_DAEMON_READY);
+     root_command_daemon();

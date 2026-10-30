@@ -1,0 +1,24 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.tv.leanback.launcher'
+    compileSdk 34
+
+    defaultConfig {
+        // SmartTube checks for a known Android TV launcher package before publishing Home channels.
+        // This hidden, code-free marker is only that compatibility signal on this Fire TV.
+        applicationId 'com.tv.leanback.launcher'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+        }
+    }
+}

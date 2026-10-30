@@ -1,0 +1,58 @@
+name: Build and publish previews
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-22.04-arm, macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned build dependencies
+        run: python -m pip install -r requirements-build.txt
+      - name: Run local safety tests
+        run: python -m unittest discover -s tests -v
+      - name: Build standalone executable
+        run: python -m PyInstaller --noconfirm installer.spec
+      - name: Verify standalone executable
+        run: python smoke.py
+      - name: Create ZIP
+        run: python make_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firetv-customhome-${{ matrix.os }}
+          path: releases/*.zip
+          if-no-files-found: error
+  release:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: firetv-customhome-*
+          path: release-files
+          merge-multiple: true
+      - name: Publish preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            release_tag="$GITHUB_REF_NAME"
+          else
+            release_tag="preview-$GITHUB_RUN_NUMBER"
+          fi
+          gh release create "$release_tag" release-files/*.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$release_tag" --notes "Early preview: the Home takeover and recovery need real-device end-to-end testing. See README and LEEME.es.md."
