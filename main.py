@@ -506,16 +506,14 @@ def main():
             sheldon = matches_sheldon_5746(props, kernel, machine)
             print(t('Cambio experimental en 5746: no probado en un Fire TV real.' if sheldon else 'Firmware compatible con el perfil revisado.', 'Experimental 5746 change: not tested on a real Fire TV.' if sheldon else 'Firmware matches the reviewed profile.'))
             print(t('El root temporal puede colgar o reiniciar el Fire TV; restaurar Home después puede requerir repetirlo.', 'Temporary root can freeze or reboot the Fire TV; restoring Home later may require repeating it.'))
-            print(t('Comprueba en la TV que el launcher y Ajustes funcionan y que no hay una actualización pendiente de instalar.',
-                    'On the TV, check that the launcher and Settings work and no update is waiting to install.'))
+            print(t('Comprueba en la TV que el launcher y Ajustes funcionan.', 'On the TV, check that the launcher and Settings work.'))
             if ask('¿Quieres preparar el cambio del botón Home?', 'Prepare the Home button change?'):
-                if not ask('¿Has comprobado el launcher, Ajustes y la ausencia de actualización pendiente?',
-                           'Have you checked the launcher, Settings, and that no update is pending?'):
+                if not ask('¿Has comprobado el launcher y Ajustes?', 'Have you checked the launcher and Settings?'):
                     raise RuntimeError(t('Cambio de Home cancelado.', 'Home change cancelled.'))
                 print(t('Descargando GhostLock y aplicando el parche verificado…', 'Downloading GhostLock and applying the verified patch…'))
                 helper = (rootpatch.reconstruct_sheldon(asset('sheldonp-5746-home-only.bsdiff'), session / 'sheldon-home-only.arm') if sheldon else rootpatch.reconstruct(asset('kara-home-only.bsdiff'), session / 'kara-home-only.arm'))
-                print(t('Un solo intento; no se desactivarán las actualizaciones. Escribe ROOT para aceptar el riesgo.',
-                        'One attempt only; updates will not be disabled. Type ROOT to accept the risk.'))
+                print(t('Usará el root activo o hará un solo intento; no desactivará las actualizaciones. Escribe ROOT para confirmar.',
+                        'Use existing root or make one attempt; updates will not be disabled. Type ROOT to confirm.'))
                 if input('ROOT: ').strip() == 'ROOT':
                     def review_step(name):
                         path = session / name

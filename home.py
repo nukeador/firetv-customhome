@@ -34,22 +34,30 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
         return 'skipped'
     if device.shell('cat /sys/devices/system/cpu/online').strip() != '0-3':
         raise RuntimeError('CPU topology differs from the reviewed device')
-    if device.shell('getenforce').strip() != 'Enforcing' or 'uid=2000' not in device.shell('id'):
-        raise RuntimeError('Expected enforcing SELinux and the ADB shell user')
+    existing = root_command(device, '/system/bin/id') if sheldon else ''
+    reuse_root = sheldon and 'uid=0' in existing
+    expected_selinux = 'Permissive' if reuse_root else 'Enforcing'
+    if device.shell('getenforce').strip() != expected_selinux or 'uid=2000' not in device.shell('id'):
+        raise RuntimeError('Expected ADB shell and SELinux state were not confirmed')
     launcher_before = device.shell('dumpsys package com.amazon.tv.launcher')
     starter_before = device.shell('dumpsys package com.amazon.firehomestarter')
     expected_home = disabled_home_component(launcher_before) if restore_only else enabled_home_component(launcher_before)
     expected_starter = '3' if restore_only else '0'
     if not expected_home or not __import__('re').search(r'User 0:.*\benabled=' + expected_starter + r'\b', starter_before):
         raise RuntimeError('Original Home component or starter state differs; stop')
-    device.push(root_asset, remote)
-    device.shell('chmod 700 ' + remote)
+    if reuse_root:
+        remote_hash = device.shell('md5sum ' + remote).split()
+        if not remote_hash or remote_hash[0] != hashlib.md5(root_asset.read_bytes()).hexdigest():
+            raise RuntimeError('Active root helper does not match the reviewed helper; stop')
+        print('Root temporal activo; no se repetirá GhostLock / Reusing active root.', flush=True)
+    else:
+        device.push(root_asset, remote)
+        device.shell('chmod 700 ' + remote)
     probe = device.shell(remote + (' --check-profile' if sheldon else ' --probe'), timeout=120)
     (Path(session) / 'root-probe.txt').write_text(probe, encoding='utf-8')
     if ('target=sheldonp-PS7717.5746-experimental' not in probe if sheldon else 'V2 SAFE PROBE PASS' not in probe):
         raise RuntimeError('Safety probe failed; exploit not started')
-    existing = root_command(device, '/system/bin/id')
-    if 'uid=0' in existing:
+    if not reuse_root and 'uid=0' in root_command(device, '/system/bin/id'):
         raise RuntimeError('Root daemon already present; refusing a second exploit')
     log_path = '/data/local/tmp/sheldon-home-only.log' if sheldon else '/data/local/tmp/kara-home-only.log'
     old_log = device.shell('cat ' + log_path + ' 2>/dev/null')
@@ -60,30 +68,33 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
         if device.shell('settings get secure block_cec_standby').strip() != '1':
             raise RuntimeError('CEC guard could not be confirmed; exploit not started')
         live_started = True
-        (Path(session) / 'root-attempt.txt').write_text('One live attempt started. Restart the Fire TV to end temporary root.\n', encoding='utf-8')
-        if sheldon:
-            print('Iniciando GhostLock / Starting GhostLock…', flush=True)
-            start_output = device.shell('(nohup ' + remote + ' --tries 1 >>' + log_path + ' 2>&1 </dev/null &); sleep 1', timeout=30)
-            (Path(session) / 'root-start.txt').write_text(start_output, encoding='utf-8')
-            print('Esperando resultado / Waiting for result…', flush=True)
+        (Path(session) / 'root-attempt.txt').write_text(('Existing root reused.' if reuse_root else 'One live attempt started.') + ' Restart the Fire TV to end temporary root.\n', encoding='utf-8')
+        if reuse_root:
+            log = old_log
         else:
-            device.shell('nohup ' + remote + ' --live RUN-KARA-PS7713-HOME-ONLY-V2 >/data/local/tmp/kara-home-only-start.log 2>&1 </dev/null; sleep 5', timeout=120)
-        deadline = time.monotonic() + (120 if sheldon else 45)
-        log = ''
-        last_report = time.monotonic()
-        while time.monotonic() < deadline:
-            log = device.shell('cat ' + log_path, timeout=30)
-            new_log = log[len(old_log):] if log.startswith(old_log) else ''
-            if sheldon and time.monotonic() - last_report >= 15:
-                print('GhostLock: ' + (new_log.strip().splitlines()[-1][:180] if new_log.strip() else 'esperando registro / waiting for log'), flush=True)
-                last_report = time.monotonic()
-            if ('[ROOT] uid=0 daemon' in new_log and '[home-only] OTA untouched' in new_log or 'holding reclaim' in new_log or 'preloaded read slot failed' in new_log or 'profile rejected' in new_log) if sheldon else ('ROOT DAEMON READY' in new_log or 'reclaim preparation failed' in new_log):
-                break
-            time.sleep(2)
+            if sheldon:
+                print('Iniciando GhostLock / Starting GhostLock…', flush=True)
+                start_output = device.shell('(nohup ' + remote + ' --tries 1 >>' + log_path + ' 2>&1 </dev/null &); sleep 1', timeout=30)
+                (Path(session) / 'root-start.txt').write_text(start_output, encoding='utf-8')
+                print('Esperando resultado / Waiting for result…', flush=True)
+            else:
+                device.shell('nohup ' + remote + ' --live RUN-KARA-PS7713-HOME-ONLY-V2 >/data/local/tmp/kara-home-only-start.log 2>&1 </dev/null; sleep 5', timeout=120)
+            deadline = time.monotonic() + (120 if sheldon else 45)
+            log = ''
+            last_report = time.monotonic()
+            while time.monotonic() < deadline:
+                log = device.shell('cat ' + log_path, timeout=30)
+                new_log = log[len(old_log):] if log.startswith(old_log) else ''
+                if sheldon and time.monotonic() - last_report >= 15:
+                    print('GhostLock: ' + (new_log.strip().splitlines()[-1][:180] if new_log.strip() else 'esperando registro / waiting for log'), flush=True)
+                    last_report = time.monotonic()
+                if ('[ROOT] uid=0 daemon' in new_log and '[home-only] OTA untouched' in new_log or 'holding reclaim' in new_log or 'preloaded read slot failed' in new_log or 'profile rejected' in new_log) if sheldon else ('ROOT DAEMON READY' in new_log or 'reclaim preparation failed' in new_log):
+                    break
+                time.sleep(2)
         (Path(session) / 'root-result.txt').write_text(log, encoding='utf-8')
         if not log.startswith(old_log):
             raise RuntimeError('Root log changed unexpectedly; stop')
-        new_log = log[len(old_log):]
+        new_log = log if reuse_root else log[len(old_log):]
         if (('[home-only] OTA untouched' not in new_log or '[ROOT] uid=0 daemon' not in new_log) if sheldon else ('HOME_ONLY_POLICY: updater packages/settings/staged files untouched' not in new_log or 'ROOT DAEMON READY' not in new_log)):
             raise RuntimeError('Root was not verified; stop, do not retry automatically')
         if 'uid=0' not in root_command(device, '/system/bin/id'):
@@ -91,8 +102,11 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
         if sheldon and device.shell('getenforce').strip() != 'Permissive':
             raise RuntimeError('Temporary SELinux state was not confirmed; Home was not changed')
         ota = root_command(device, 'if [ -n "$(ls -A /data/ota_package 2>/dev/null)" ] || [ -e /cache/recovery/command ] || [ -e /cache/recovery/block.map ]; then echo PENDING; else echo CLEAR; fi')
-        if 'CLEAR' not in ota or 'PENDING' in ota:
+        (Path(session) / 'ota-check.txt').write_text(ota, encoding='utf-8')
+        if not sheldon and ('CLEAR' not in ota or 'PENDING' in ota):
             raise RuntimeError('Pending update state is not clear; Home was not changed')
+        if sheldon and ('CLEAR' not in ota or 'PENDING' in ota):
+            print('Estado de actualización no confirmado; se conserva y se continúa. / Update state unconfirmed; leaving it untouched and continuing.', flush=True)
         if restore_only:
             restore_home(device, session)
             (Path(session) / 'home-restored.txt').write_text('Amazon Home restored and resolved.\n', encoding='utf-8')

@@ -229,6 +229,24 @@ class Tests(unittest.TestCase):
             self.assertFalse(dev.starter);self.assertFalse(dev.activity)
             self.assertFalse(any('pm disable' in call and 'software.ota' in call for call in dev.calls))
             self.assertEqual(sum('--tries 1' in call for call in dev.calls), 1)
+            existing = SheldonDevice(); existing.live = True
+            previous_shell = existing.shell
+            def existing_shell(cmd, timeout=60):
+                if cmd.startswith('md5sum '):
+                    existing.calls.append(cmd)
+                    return hashlib.md5(b'test helper').hexdigest() + '  helper'
+                if 'echo PENDING' in cmd:
+                    existing.calls.append(cmd)
+                    return 'PENDING'
+                return previous_shell(cmd, timeout)
+            existing.shell = existing_shell
+            second_session = Path(directory) / 'existing'; second_session.mkdir()
+            with patch.object(home, 'SHELDON_SHA256', hashlib.sha256(b'test helper').hexdigest()):
+                self.assertEqual(home.apply(existing, props, '4.4.162+', 'armv7l', helper, second_session, True), 'changed')
+            self.assertNotIn('push', existing.calls)
+            self.assertFalse(any('--tries 1' in call for call in existing.calls))
+            self.assertTrue(existing.activity)
+            self.assertEqual((second_session / 'ota-check.txt').read_text(), 'PENDING')
 
     def test_sheldon_reconstruction_and_download_authenticity(self):
         original = Path('/private/tmp/firetv-ghostlock-official/build/ghostlock_root')
