@@ -20,6 +20,8 @@ Una pantalla de inicio sencilla para Fire TV, con «Seguir viendo» de Stremio, 
 5. Responde a las preguntas en el ordenador. Cuando la TV pregunte **¿Permitir depuración USB?**, acepta con el mando. El instalador te deja elegir qué aplicaciones instalar y qué limpiar.
 6. Inicia sesión con tus cuentas. Conecta Stremio desde el acceso al final de la lista de aplicaciones. Si no aparecen recomendaciones de SmartTube, abre SmartTube Beta y activa su servicio de canales.
 
+Puedes volver a ejecutar el instalador si quedó a medias: muestra lo que ya está instalado y permite elegir cada paso. El puente de SmartTube se puede instalar antes que SmartTube.
+
 Mantén pulsado **OK** sobre una aplicación para cambiarla de sitio. Pulsa **Menú** sobre ella para abrir sus ajustes. Se conservan la configuración y el orden de un launcher ya instalado; en una instalación nueva puedes ordenar las aplicaciones a tu gusto.
 
 Conserva la copia creada por el instalador. Puedes volver a abrirlo para restaurar las aplicaciones desactivadas; los datos borrados no se pueden recuperar. El cambio del botón Inicio solo está disponible en la versión de Fire TV compatible; en otras puedes abrir el launcher como una aplicación.

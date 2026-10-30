@@ -20,6 +20,8 @@ A simple Fire TV home screen with Stremio’s Continue Watching, SmartTube recom
 5. Follow the questions on your computer. When the TV asks **Allow USB debugging?**, accept with the remote. The installer lets you choose which apps to install and what to clean up.
 6. Sign in to your own accounts. Connect Stremio using the shortcut at the end of the app list. If SmartTube recommendations are missing, open SmartTube Beta and enable its channel service.
 
+You can run the installer again after an interruption: it shows what is already installed and lets you choose each step. The SmartTube bridge can be installed before SmartTube.
+
 Hold **OK** on an app to rearrange it. Press **Menu** on an app to open its settings. Existing launcher settings and app order are preserved; on a new installation you can arrange the apps yourself.
 
 Keep the backup created by the installer. You can reopen it to restore disabled apps; deleted app data cannot be recovered. Replacing the Home button is available only on the supported Fire TV version; on others the launcher opens as an app.

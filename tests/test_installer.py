@@ -115,6 +115,18 @@ class Tests(unittest.TestCase):
             dev = ExistingDevice()
             app.install_launcher(dev, Path(directory), 28, {'armeabi-v7a'})
 
+    def test_bridge_installs_without_smarttube_or_launcher(self):
+        import importlib
+        with patch('builtins.input', return_value='en'):
+            app = importlib.import_module('main')
+        class BridgeDevice:
+            def __init__(self): self.installs = []
+            def shell(self, command, timeout=60): return ''
+            def install(self, path, label): self.installs.append(label)
+        dev = BridgeDevice()
+        app.install_bridge(dev, 28, {'armeabi-v7a'})
+        self.assertEqual(dev.installs, ['marker'])
+
     def test_latest_matching_release_without_digest_fails_closed(self):
         release = [{'draft':False, 'assets':[{'name':'SmartTube_beta_1_armeabi-v7a.apk', 'digest':None}]}]
         with patch.object(downloads, 'request', return_value=json.dumps(release).encode()):

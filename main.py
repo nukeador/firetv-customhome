@@ -129,13 +129,7 @@ def check_apk(path, package, sdk, abis):
 
 def install_launcher(device, session, sdk, abis):
     check_apk(asset('tvhome.apk'), 'com.gathin.tvhome', sdk, abis)
-    check_apk(asset('smarttube-marker.apk'), 'com.tv.leanback.launcher', sdk, abis)
     installed = packages(device.shell('pm list packages'))
-    if 'com.tv.leanback.launcher' in installed:
-        print(t('Ya existe un paquete con el identificador del puente; no lo sustituiremos.',
-                'A package already uses the bridge ID; it will not be replaced.'))
-    else:
-        device.install(asset('smarttube-marker.apk'), 'marker')
     if 'com.gathin.tvhome' in installed:
         print(t('El launcher ya está instalado: conservamos su versión y su orden.',
                 'The launcher is already installed: its version and order will be preserved.'))
@@ -156,6 +150,18 @@ def install_launcher(device, session, sdk, abis):
             'Open SmartTube at least once; enable its channel service and return Home to see recommendations.'))
     print(t('El orden existente se conserva. En un launcher nuevo puedes ordenar apps manteniendo OK.',
             'Existing app order is preserved. In a fresh launcher, hold OK to reorder apps.'))
+
+
+def install_bridge(device, sdk, abis):
+    check_apk(asset('smarttube-marker.apk'), 'com.tv.leanback.launcher', sdk, abis)
+    installed = packages(device.shell('pm list packages'))
+    if 'com.tv.leanback.launcher' in installed:
+        print(t('El puente ya está instalado; se conserva.', 'The bridge is already installed; it will be preserved.'))
+    else:
+        device.install(asset('smarttube-marker.apk'), 'marker')
+    if 'com.gathin.tvhome' in installed:
+        device.shell('pm grant com.gathin.tvhome android.permission.READ_TV_LISTINGS')
+    print(t('El puente puede instalarse antes de SmartTube.', 'The bridge can be installed before SmartTube.'))
 
 
 def install_upstream(device, kind, abi, session, sdk, abis):
@@ -324,15 +330,30 @@ def main():
         sdk = int(props.get('ro.build.version.sdk', '0'))
         abi = props.get('ro.product.cpu.abi', '')
         abis = {item.strip() for item in props.get('ro.product.cpu.abilist', abi).split(',') if item.strip()}
-        launcher_installed = False
-        if sdk >= 26 and ask('¿Instalar el launcher y el puente de SmartTube?', 'Install the launcher and SmartTube bridge?', default=True):
-            install_launcher(device, session, sdk, abis)
-            launcher_installed = True
-        elif sdk < 26:
+        installed = packages(device.shell('pm list packages'))
+        status_apps = (('Launcher', 'com.gathin.tvhome'), ('SmartTube bridge', 'com.tv.leanback.launcher'),
+                       ('SmartTube Beta', 'org.smarttube.beta'), ('Stremio', 'com.stremio.one'),
+                       ('Usque', 'io.github.georgexie2333.usque'))
+        print(t('Estado actual; elige los pasos que quieras realizar:', 'Current status; choose the steps to perform:'))
+        for label, package in status_apps:
+            print('  ' + label + ': ' + (t('instalado', 'installed') if package in installed else t('no instalado', 'not installed')))
+        print(t('Puedes repetir el instalador y omitir los pasos ya realizados.',
+                'You can run the installer again and skip completed steps.'))
+        if sdk >= 26:
+            if ask('¿Instalar o comprobar el launcher?', 'Install or check the launcher?', default='com.gathin.tvhome' not in installed):
+                install_launcher(device, session, sdk, abis)
+            if ask('¿Instalar o comprobar el puente de SmartTube?', 'Install or check the SmartTube bridge?', default='com.tv.leanback.launcher' not in installed):
+                install_bridge(device, sdk, abis)
+        else:
             print(t('Este Android es anterior a 8.0; el launcher no es compatible.', 'This Android version is older than 8.0; the launcher is incompatible.'))
+        launcher_installed = 'com.gathin.tvhome' in packages(device.shell('pm list packages'))
         if abi in ('armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'):
             for kind in ('smarttube', 'stremio', 'usque'):
-                if ask('¿Descargar e instalar ' + kind + '?', 'Download and install ' + kind + '?', default=True):
+                package = {'smarttube': 'org.smarttube.beta', 'stremio': 'com.stremio.one', 'usque': 'io.github.georgexie2333.usque'}[kind]
+                already_installed = package in installed
+                question_es = ('¿Actualizar o reinstalar ' if already_installed else '¿Descargar e instalar ') + kind + '?'
+                question_en = ('Update or reinstall ' if already_installed else 'Download and install ') + kind + '?'
+                if ask(question_es, question_en, default=not already_installed):
                     try:
                         download_abi = 'universal' if kind == 'smarttube' and abi == 'x86_64' else abi
                         install_upstream(device, kind, download_abi, session, sdk, abis)
