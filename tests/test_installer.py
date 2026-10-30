@@ -174,6 +174,14 @@ class Tests(unittest.TestCase):
             url = downloads.usque_url('armeabi-v7a')
         self.assertEqual(url, 'https://github.com/GeorgeXie2333/usque-app/releases/download/v0.3.3/usque-v0.3.3-android-armeabi-v7a.apk')
 
+    def test_menu_supports_numbered_fallback(self):
+        import importlib
+        with patch('builtins.input', return_value='en'):
+            app = importlib.import_module('main')
+        with patch('builtins.input', side_effect=['invalid', '2']):
+            with patch.object(app.sys.stdin, 'isatty', return_value=False):
+                self.assertEqual(app.choose_menu('Choose', ['First', 'Second']), 1)
+
     def test_binary_patch_and_hash(self):
         def n(x):
             return int(x).to_bytes(8, 'little')

@@ -53,6 +53,56 @@ def ask(es, en, default=False):
     return reply in ('s', 'si', 'sí', 'y', 'yes')
 
 
+def choose_menu(title, entries):
+    print('\n' + title)
+    def numbered():
+        for i, label in enumerate(entries, 1):
+            print(str(i) + '. ' + label)
+        while True:
+            value = input(t('Número: ', 'Number: ')).strip()
+            if value.isdigit() and 1 <= int(value) <= len(entries):
+                return int(value) - 1
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return numbered()
+    if os.name == 'nt':
+        import msvcrt
+        def read_key():
+            key = msvcrt.getwch()
+            if key in ('\x00', '\xe0'):
+                return {'H': 'up', 'P': 'down'}.get(msvcrt.getwch(), '')
+            return 'enter' if key in ('\r', '\n') else key
+        restore = lambda: None
+    else:
+        import termios, tty, select
+        fd = sys.stdin.fileno()
+        original = termios.tcgetattr(fd)
+        tty.setcbreak(fd)
+        def restore(): termios.tcsetattr(fd, termios.TCSADRAIN, original)
+        def read_key():
+            key = os.read(fd, 1).decode('ascii', errors='ignore')
+            if key == '\x1b' and select.select([sys.stdin], [], [], 0.1)[0]:
+                key += os.read(fd, 1).decode('ascii', errors='ignore')
+                if select.select([sys.stdin], [], [], 0.1)[0]: key += os.read(fd, 1).decode('ascii', errors='ignore')
+                return {'\x1b[A': 'up', '\x1b[B': 'down'}.get(key, '')
+            if key == '\x03': raise KeyboardInterrupt
+            return 'enter' if key in ('\r', '\n') else key
+    selected = 0
+    print(t('Usa ↑/↓ y pulsa Intro.', 'Use ↑/↓ and press Enter.'))
+    try:
+        while True:
+            for i, label in enumerate(entries):
+                print(('  › ' if i == selected else '    ') + label + '\x1b[K')
+            key = read_key()
+            if key == 'enter':
+                return selected
+            if key == 'up': selected = (selected - 1) % len(entries)
+            elif key == 'down': selected = (selected + 1) % len(entries)
+            elif key.isdigit() and 1 <= int(key) <= len(entries): selected = int(key) - 1
+            print('\x1b[' + str(len(entries)) + 'A', end='', flush=True)
+    finally:
+        restore()
+
+
 def asset(name):
     manifest = json.loads((ASSETS / 'sha256.json').read_text(encoding='utf-8'))
     path = ASSETS / name
@@ -267,9 +317,24 @@ def main():
         print(t('Comprobación local correcta; no se ha conectado a ninguna TV.',
                 'Local self-check passed; no TV connection was made.'))
         return
-    diagnose = not args.restore and ask('¿Solo comprobar la compatibilidad de este Fire TV?', 'Only check this Fire TV compatibility?')
-    usque_only = not diagnose and not args.restore and ask('¿Instalar solo Usque (VPN)?', 'Install only Usque (VPN)?')
-    if not diagnose and not usque_only and not args.restore and ask('¿Quieres restaurar una limpieza anterior?', 'Do you want to restore a previous cleanup?'):
+    mode = 'restore' if args.restore else ('setup', 'components', 'cleanup', 'home', 'restore', 'diagnose', 'quit')[choose_menu(
+        t('¿Qué quieres hacer?', 'What would you like to do?'),
+        [t('Instalar desde cero o continuar', 'Install or continue setup'),
+         t('Instalar solo componentes concretos', 'Install selected components'),
+         t('Limpiar aplicaciones de Amazon', 'Clean up Amazon apps'),
+         t('Cambiar el botón Inicio', 'Change the Home button'),
+         t('Restaurar una limpieza anterior', 'Restore a previous cleanup'),
+         t('Comprobar compatibilidad', 'Check compatibility'), t('Salir', 'Exit')])]
+    if mode == 'quit': return
+    diagnose = mode == 'diagnose'
+    component = None
+    if mode == 'components':
+        index = choose_menu(t('Elige qué instalar:', 'Choose what to install:'),
+            ['Launcher', t('Puente de SmartTube', 'SmartTube bridge'), 'SmartTube Beta', 'Stremio', 'Usque (VPN)', t('Cancelar', 'Cancel')])
+        component = ('launcher', 'bridge', 'smarttube', 'stremio', 'usque', None)[index]
+        if component is None: return
+    usque_only = component == 'usque'
+    if mode == 'restore' and not args.restore:
         backups = sorted((STATE / 'backups').glob('*/identity.json'), reverse=True)
         if not backups:
             raise RuntimeError(t('No hay copias guardadas en este ordenador.', 'No backups were found on this computer.'))
@@ -376,9 +441,9 @@ def main():
         print(t('Puedes repetir el instalador y omitir los pasos ya realizados.',
                 'You can run the installer again and skip completed steps.'))
         if sdk >= 26:
-            if ask('¿Instalar o comprobar el launcher?', 'Install or check the launcher?', default='com.gathin.tvhome' not in installed):
+            if component == 'launcher' or (mode == 'setup' and ask('¿Instalar o comprobar el launcher?', 'Install or check the launcher?', default='com.gathin.tvhome' not in installed)):
                 install_launcher(device, session, sdk, abis)
-            if ask('¿Instalar o comprobar el puente de SmartTube?', 'Install or check the SmartTube bridge?', default='com.tv.leanback.launcher' not in installed):
+            if component == 'bridge' or (mode == 'setup' and ask('¿Instalar o comprobar el puente de SmartTube?', 'Install or check the SmartTube bridge?', default='com.tv.leanback.launcher' not in installed)):
                 install_bridge(device, sdk, abis)
         else:
             print(t('Este Android es anterior a 8.0; el launcher no es compatible.', 'This Android version is older than 8.0; the launcher is incompatible.'))
@@ -389,7 +454,7 @@ def main():
                 already_installed = package in installed
                 question_es = ('¿Actualizar o reinstalar ' if already_installed else '¿Descargar e instalar ') + kind + '?'
                 question_en = ('Update or reinstall ' if already_installed else 'Download and install ') + kind + '?'
-                if ask(question_es, question_en, default=not already_installed):
+                if component == kind or (mode == 'setup' and ask(question_es, question_en, default=not already_installed)):
                     try:
                         download_abi = 'universal' if kind == 'smarttube' and abi == 'x86_64' else abi
                         install_upstream(device, kind, download_abi, session, sdk, abis)
@@ -397,6 +462,9 @@ def main():
                         print(t('No se instaló ', 'Not installed: ') + kind + ': ' + str(error))
         else:
             print(t('Arquitectura no reconocida; se omiten las descargas.', 'Unknown architecture; downloads skipped.'))
+        if mode == 'components':
+            finish_adb(device, host, port, wired)
+            return
         installed = packages(device.shell('pm list packages'))
         if 'com.gathin.tvhome' in installed and 'io.github.georgexie2333.usque' in installed:
             print(t('El acceso a notificaciones permite desconectar Usque desde Home; Android concede acceso a todas las notificaciones.',
@@ -408,12 +476,13 @@ def main():
                 if 'com.gathin.tvhome.UsqueNotificationListener' not in listeners:
                     print(t('No se pudo verificar el permiso. Configúralo en los ajustes de la TV.',
                             'The permission could not be verified. Configure it in the TV settings.'))
-        select_cleanup(device, props, kernel, machine, session)
+        if mode in ('setup', 'cleanup'):
+            select_cleanup(device, props, kernel, machine, session)
         home_changed = False
         current_home = device.shell('cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME')
         if home.HOME in current_home:
             print(t('El launcher ya es Home; no se ejecutará root.', 'The launcher is already Home; root will not be run.'))
-        elif launcher_installed and matches_identity(props, kernel, machine):
+        elif mode in ('setup', 'home') and launcher_installed and matches_identity(props, kernel, machine):
             print(t('Este firmware coincide con el dispositivo probado. El root temporal puede colgar o reiniciar el Fire TV; para restaurar Home después puede ser necesario repetirlo.',
                     'This firmware matches the tested device. Temporary root can freeze or reboot the Fire TV; restoring Home later may require repeating it.'))
             print(t('Comprueba en la TV que el launcher y Ajustes funcionan y que no hay una actualización pendiente de instalar.',
@@ -444,7 +513,9 @@ def main():
                             raise RuntimeError(t('No se confirmó Home; se intentó restaurar Amazon Home.', 'Home was not confirmed; Amazon Home restoration was attempted.'))
                 else:
                     print(t('Cambio de Home cancelado.', 'Home change cancelled.'))
-        elif not matches_identity(props, kernel, machine):
+        elif mode == 'home' and not launcher_installed:
+            print(t('Instala primero el launcher desde el menú de componentes.', 'Install the launcher first from the components menu.'))
+        elif mode in ('setup', 'home') and not matches_identity(props, kernel, machine):
             print(t('Modelo o firmware no verificado: se conserva Home de Amazon.',
                     'Unverified model or firmware: Amazon Home is retained.'))
         journal = json.loads((session / 'changes.json').read_text(encoding='utf-8'))

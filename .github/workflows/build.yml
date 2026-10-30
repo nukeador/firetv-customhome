@@ -1,4 +1,4 @@
-name: Build and publish previews
+name: Build and publish releases
 on:
   workflow_dispatch:
   push:
@@ -46,13 +46,13 @@ jobs:
           pattern: firetv-customhome-*
           path: release-files
           merge-multiple: true
-      - name: Publish preview release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             release_tag="$GITHUB_REF_NAME"
           else
-            release_tag="preview-$GITHUB_RUN_NUMBER"
+            release_tag="0.1.$GITHUB_RUN_NUMBER"
           fi
           gh release create "$release_tag" release-files/*.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$release_tag" --notes "Early preview: the Home takeover and recovery need real-device end-to-end testing. See README and LEEME.es.md."

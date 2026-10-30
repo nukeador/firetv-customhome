@@ -17,7 +17,7 @@ A simple Fire TV home screen with Stremio’s Continue Watching, SmartTube recom
    - **Windows:** double-click `Start.bat`.
    - **macOS:** double-click `Start.command`. If macOS blocks it, allow it in System Settings.
    - **Linux:** open a terminal in the folder and run `./Start.sh`.
-5. Follow the questions on your computer. When the TV asks **Allow USB debugging?**, accept with the remote. The installer lets you choose which apps to install and what to clean up.
+5. Use the arrow keys and Enter to choose a task, then follow the questions on your computer. When the TV asks **Allow USB debugging?**, accept with the remote. The installer lets you choose which apps to install and what to clean up.
 6. Sign in to your own accounts. Connect Stremio using the shortcut at the end of the app list. If SmartTube recommendations are missing, open SmartTube Beta and enable its channel service.
 
 You can run the installer again after an interruption: it shows what is already installed and lets you choose each step. The SmartTube bridge can be installed before SmartTube.

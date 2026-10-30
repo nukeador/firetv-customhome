@@ -17,7 +17,7 @@ Una pantalla de inicio sencilla para Fire TV, con «Seguir viendo» de Stremio, 
    - **Windows:** haz doble clic en `Start.bat`.
    - **macOS:** haz doble clic en `Start.command`. Si macOS lo bloquea, autorízalo en Ajustes del Sistema.
    - **Linux:** abre una terminal en la carpeta y ejecuta `./Start.sh`.
-5. Responde a las preguntas en el ordenador. Cuando la TV pregunte **¿Permitir depuración USB?**, acepta con el mando. El instalador te deja elegir qué aplicaciones instalar y qué limpiar.
+5. Elige una tarea con las flechas y la tecla Intro; después responde a las preguntas en el ordenador. Cuando la TV pregunte **¿Permitir depuración USB?**, acepta con el mando. El instalador te deja elegir qué aplicaciones instalar y qué limpiar.
 6. Inicia sesión con tus cuentas. Conecta Stremio desde el acceso al final de la lista de aplicaciones. Si no aparecen recomendaciones de SmartTube, abre SmartTube Beta y activa su servicio de canales.
 
 Puedes volver a ejecutar el instalador si quedó a medias: muestra lo que ya está instalado y permite elegir cada paso. El puente de SmartTube se puede instalar antes que SmartTube.
