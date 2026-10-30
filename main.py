@@ -186,6 +186,19 @@ def show_compatibility(device, props, kernel, machine):
         result = device.shell('if [ -f /data/local/tmp/sheldon-home-only.log ]; then wc -c /data/local/tmp/sheldon-home-only.log; tail -n 30 /data/local/tmp/sheldon-home-only.log; else echo NO_LOG_FILE; fi', timeout=30).strip()
         print(result or t('Registro vacío.', 'Empty log.'))
         print(t('Disponibilidad de nohup:', 'nohup availability:') + ' ' + (device.shell('command -v nohup || echo NOT_FOUND').strip() or '?'))
+        device.root_variant = 'sheldon-5746'
+        root_id = home.root_command(device, '/system/bin/id').strip()
+        print(t('Root actual:', 'Current root:') + ' ' + (root_id or t('sin respuesta', 'no response')))
+        if 'uid=0' in root_id:
+            print(t('Estado de actualización, consulta sin cambios:', 'Update status, read-only:'))
+            for label, command in (
+                ('OTA', 'if [ -d /data/ota_package ]; then ls -la /data/ota_package; else echo NO_OTA_DIR; fi'),
+                ('Recovery', 'for p in /cache/recovery/command /cache/recovery/block.map; do if [ -e "$p" ]; then echo "PRESENT $p"; else echo "ABSENT $p"; fi; done'),
+                ('Check', 'if [ -n "$(ls -A /data/ota_package 2>/dev/null)" ] || [ -e /cache/recovery/command ] || [ -e /cache/recovery/block.map ]; then echo PENDING; else echo CLEAR; fi'),
+            ):
+                output = home.root_command(device, command).strip()
+                print(label + ': ' + (output or t('sin respuesta', 'no response')))
+
     print(t('Puedes hacer una foto de esta pantalla. No incluye tu cuenta ni el número de serie.',
             'You can photograph this screen. It does not include your account or serial number.'))
 
