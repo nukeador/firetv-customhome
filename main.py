@@ -181,6 +181,11 @@ def show_compatibility(device, props, kernel, machine):
         ('SELinux', device.shell('getenforce').strip()),
     ):
         print(label + ': ' + value)
+    if props.get('ro.product.device') == 'sheldonp':
+        print(t('Registro del último intento de Home:', 'Last Home attempt log:'))
+        result = device.shell('if [ -f /data/local/tmp/sheldon-home-only.log ]; then wc -c /data/local/tmp/sheldon-home-only.log; tail -n 30 /data/local/tmp/sheldon-home-only.log; else echo NO_LOG_FILE; fi', timeout=30).strip()
+        print(result or t('Registro vacío.', 'Empty log.'))
+        print(t('Disponibilidad de nohup:', 'nohup availability:') + ' ' + (device.shell('command -v nohup || echo NOT_FOUND').strip() or '?'))
     print(t('Puedes hacer una foto de esta pantalla. No incluye tu cuenta ni el número de serie.',
             'You can photograph this screen. It does not include your account or serial number.'))
 
