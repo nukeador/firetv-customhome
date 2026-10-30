@@ -182,6 +182,63 @@ class Tests(unittest.TestCase):
             with patch.object(app.sys.stdin, 'isatty', return_value=False):
                 self.assertEqual(app.choose_menu('Choose', ['First', 'Second']), 1)
 
+    def test_sheldon_experimental_profile_requires_exact_device(self):
+        props = {'ro.product.model':'AFTSSS', 'ro.product.device':'sheldonp', 'ro.build.version.incremental':'0036408029828', 'ro.build.version.sdk':'28', 'ro.product.cpu.abi':'armeabi-v7a'}
+        self.assertTrue(policy.matches_sheldon_5746(props, '4.4.162+', 'armv7l'))
+        props['ro.build.version.incremental'] = '0036408028548'
+        self.assertFalse(policy.matches_sheldon_5746(props, '4.4.162+', 'armv7l'))
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(RuntimeError):
+                home.apply(FakeDevice(), props, '4.4.162+', 'armv7l', Path(directory) / 'missing', directory, True)
+
+    def test_sheldon_changes_home_only_after_root_and_can_restore(self):
+        class SheldonDevice:
+            def __init__(self): self.calls=[]; self.live=False; self.starter=False; self.activity=False; self.resolved=''; self.cec='0'
+            def push(self, source, destination): self.calls.append('push')
+            def shell(self, cmd, timeout=60):
+                self.calls.append(cmd)
+                if cmd == 'settings get secure block_cec_standby': return self.cec
+                if cmd.startswith('settings put secure block_cec_standby '): self.cec=cmd.split()[-1]; return ''
+                if cmd == 'cat /sys/devices/system/cpu/online': return '0-3'
+                if cmd == 'getenforce': return 'Permissive' if self.live else 'Enforcing'
+                if cmd == 'id': return 'uid=2000(shell)'
+                if cmd == 'dumpsys package com.amazon.firehomestarter': return 'User 0: installed=true enabled=' + ('3' if self.starter else '0')
+                if cmd == 'dumpsys package com.amazon.tv.launcher': return ('      disabledComponents:\n' if self.activity else '      enabledComponents:\n') + '        com.amazon.tv.launcher.ui.HomeActivity_vNext\n\n'
+                if cmd.endswith(' --check-profile'): return 'target=sheldonp-PS7717.5746-experimental'
+                if ' --client ' in cmd:
+                    if '/system/bin/id' in cmd: return 'uid=0(root)' if self.live else 'not running'
+                    if 'echo PENDING' in cmd: return 'CLEAR'
+                    if 'disable-user' in cmd: self.starter=True
+                    if 'pm disable --user' in cmd: self.activity=True
+                    if 'pm enable --user' in cmd: self.activity=False
+                    if 'pm default-state' in cmd: self.starter=False
+                    if 'set-home-activity' in cmd: self.resolved='com.amazon.tv.launcher/.ui.HomeActivity_vNext' if 'com.amazon.tv.launcher/' in cmd else home.HOME
+                    return 'ok'
+                if cmd.startswith('nohup '): self.live=True; return ''
+                if cmd.startswith('cat /data/local/tmp/sheldon-home-only.log'): return '[ROOT] uid=0 daemon\n[home-only] OTA untouched\n' if self.live else ''
+                if cmd == 'pm list packages -d': return 'package:com.amazon.firehomestarter' if self.starter else ''
+                if cmd.startswith('cmd package resolve-activity'): return self.resolved
+                if cmd == 'dumpsys activity activities': return 'mFocusedApp ' + home.HOME
+                return ''
+        props={'ro.product.model':'AFTSSS','ro.product.device':'sheldonp','ro.build.version.incremental':'0036408029828','ro.build.version.sdk':'28','ro.product.cpu.abi':'armeabi-v7a'}
+        with tempfile.TemporaryDirectory() as directory:
+            helper=Path(directory)/'helper';helper.write_bytes(b'test helper'); dev=SheldonDevice()
+            with patch.object(home, 'SHELDON_SHA256', hashlib.sha256(b'test helper').hexdigest()):
+                self.assertEqual(home.apply(dev, props, '4.4.162+', 'armv7l', helper, directory, True), 'changed')
+                self.assertTrue(home.restore_home(dev, directory))
+            self.assertFalse(dev.starter);self.assertFalse(dev.activity)
+            self.assertFalse(any('pm disable' in call and 'software.ota' in call for call in dev.calls))
+            self.assertEqual(sum('--tries 1' in call for call in dev.calls), 1)
+
+    def test_sheldon_reconstruction_and_download_authenticity(self):
+        original = Path('/private/tmp/firetv-ghostlock-official/build/ghostlock_root')
+        if not original.is_file():
+            self.skipTest('Original reference binary is not included')
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(rootpatch, 'request', return_value=original.read_bytes()):
+                result = rootpatch.reconstruct_sheldon(Path('assets/sheldonp-5746-home-only.bsdiff'), Path(directory) / 'helper')
+            self.assertEqual(hashlib.sha256(result.read_bytes()).hexdigest(), home.SHELDON_SHA256)
+
     def test_binary_patch_and_hash(self):
         def n(x):
             return int(x).to_bytes(8, 'little')

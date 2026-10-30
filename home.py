@@ -3,22 +3,29 @@ import hashlib
 import shlex
 import time
 from pathlib import Path
-from policy import matches_identity
+from policy import matches_identity, matches_sheldon_5746
 
 ROOT_SHA256 = '46804934a67e34f260ee324161ec26288bc95a464fe02cb8dde93feb50d2aec0'
 REMOTE = '/data/local/tmp/kara-home-only.arm'
 HOME = 'com.gathin.tvhome/.MainActivity'
+SHELDON_REMOTE = '/data/local/tmp/sheldon-home-only.arm'
+SHELDON_SHA256 = '7db65c5570309b20f6664cf48ed2d141ae9d0a42a2ed35035d79662269d96ff2'
 
 
 def root_command(device, command):
+    if getattr(device, 'root_variant', '') == 'sheldon-5746':
+        return device.shell(SHELDON_REMOTE + ' --client ' + shlex.quote(command), timeout=120)
     return device.shell(REMOTE + ' --cmd ' + shlex.quote(command), timeout=120)
 
 
 def apply(device, props, kernel, machine, root_asset, session, confirm, review_step=None, restore_only=False):
-    if not matches_identity(props, kernel, machine):
+    sheldon = matches_sheldon_5746(props, kernel, machine)
+    if not sheldon and not matches_identity(props, kernel, machine):
         raise RuntimeError('Firmware not verified; root is unavailable on this device')
+    device.root_variant = 'sheldon-5746' if sheldon else 'kara'
+    remote = SHELDON_REMOTE if sheldon else REMOTE
     root_asset = Path(root_asset)
-    if hashlib.sha256(root_asset.read_bytes()).hexdigest() != ROOT_SHA256:
+    if hashlib.sha256(root_asset.read_bytes()).hexdigest() != (SHELDON_SHA256 if sheldon else ROOT_SHA256):
         raise RuntimeError('Root helper hash mismatch')
     original_cec = device.shell('settings get secure block_cec_standby').strip()
     if original_cec not in ('0', '1', 'null'):
@@ -35,16 +42,17 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
     expected_starter = '3' if restore_only else '0'
     if not expected_home or not __import__('re').search(r'User 0:.*\benabled=' + expected_starter + r'\b', starter_before):
         raise RuntimeError('Original Home component or starter state differs; stop')
-    device.push(root_asset, REMOTE)
-    device.shell('chmod 700 ' + REMOTE)
-    probe = device.shell(REMOTE + ' --probe', timeout=120)
+    device.push(root_asset, remote)
+    device.shell('chmod 700 ' + remote)
+    probe = device.shell(remote + (' --check-profile' if sheldon else ' --probe'), timeout=120)
     (Path(session) / 'root-probe.txt').write_text(probe, encoding='utf-8')
-    if 'V2 SAFE PROBE PASS' not in probe:
+    if ('target=sheldonp-PS7717.5746-experimental' not in probe if sheldon else 'V2 SAFE PROBE PASS' not in probe):
         raise RuntimeError('Safety probe failed; exploit not started')
     existing = root_command(device, '/system/bin/id')
     if 'uid=0' in existing:
         raise RuntimeError('Root daemon already present; refusing a second exploit')
-    old_log = device.shell('cat /data/local/tmp/kara-home-only.log 2>/dev/null')
+    log_path = '/data/local/tmp/sheldon-home-only.log' if sheldon else '/data/local/tmp/kara-home-only.log'
+    old_log = device.shell('cat ' + log_path + ' 2>/dev/null')
     mutation_started = False
     live_started = False
     try:
@@ -53,23 +61,28 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
             raise RuntimeError('CEC guard could not be confirmed; exploit not started')
         live_started = True
         (Path(session) / 'root-attempt.txt').write_text('One live attempt started. Restart the Fire TV to end temporary root.\n', encoding='utf-8')
-        device.shell('nohup ' + REMOTE + ' --live RUN-KARA-PS7713-HOME-ONLY-V2 >/data/local/tmp/kara-home-only-start.log 2>&1 </dev/null; sleep 5', timeout=120)
-        deadline = time.monotonic() + 45
+        if sheldon:
+            device.shell('nohup ' + remote + ' --tries 1 >>' + log_path + ' 2>&1 </dev/null &', timeout=30)
+        else:
+            device.shell('nohup ' + remote + ' --live RUN-KARA-PS7713-HOME-ONLY-V2 >/data/local/tmp/kara-home-only-start.log 2>&1 </dev/null; sleep 5', timeout=120)
+        deadline = time.monotonic() + (120 if sheldon else 45)
         log = ''
         while time.monotonic() < deadline:
-            log = device.shell('cat /data/local/tmp/kara-home-only.log', timeout=30)
+            log = device.shell('cat ' + log_path, timeout=30)
             new_log = log[len(old_log):] if log.startswith(old_log) else ''
-            if 'ROOT DAEMON READY' in new_log or 'reclaim preparation failed' in new_log:
+            if ('[ROOT] uid=0 daemon' in new_log and '[home-only] OTA untouched' in new_log) if sheldon else ('ROOT DAEMON READY' in new_log or 'reclaim preparation failed' in new_log):
                 break
             time.sleep(2)
         (Path(session) / 'root-result.txt').write_text(log, encoding='utf-8')
         if not log.startswith(old_log):
             raise RuntimeError('Root log changed unexpectedly; stop')
         new_log = log[len(old_log):]
-        if 'HOME_ONLY_POLICY: updater packages/settings/staged files untouched' not in new_log or 'ROOT DAEMON READY' not in new_log:
+        if (('[home-only] OTA untouched' not in new_log or '[ROOT] uid=0 daemon' not in new_log) if sheldon else ('HOME_ONLY_POLICY: updater packages/settings/staged files untouched' not in new_log or 'ROOT DAEMON READY' not in new_log)):
             raise RuntimeError('Root was not verified; stop, do not retry automatically')
         if 'uid=0' not in root_command(device, '/system/bin/id'):
             raise RuntimeError('Root identity not confirmed; stop')
+        if sheldon and device.shell('getenforce').strip() != 'Permissive':
+            raise RuntimeError('Temporary SELinux state was not confirmed; Home was not changed')
         ota = root_command(device, 'if [ -n "$(ls -A /data/ota_package 2>/dev/null)" ] || [ -e /cache/recovery/command ] || [ -e /cache/recovery/block.map ]; then echo PENDING; else echo CLEAR; fi')
         if 'CLEAR' not in ota or 'PENDING' in ota:
             raise RuntimeError('Pending update state is not clear; Home was not changed')
@@ -79,6 +92,7 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
             if review_step:
                 review_step('home-restored.png')
             return 'restored'
+        (Path(session) / 'root-variant.txt').write_text(device.root_variant, encoding='utf-8')
         journal = Path(session) / 'home-intent.txt'
         journal.write_text('Home transition intended; restore requires temporary root.\n', encoding='utf-8')
         mutation_started = True
@@ -145,6 +159,9 @@ def enabled_home_component(dump):
 
 
 def restore_home(device, session):
+    variant = Path(session) / 'root-variant.txt'
+    if variant.exists():
+        device.root_variant = variant.read_text(encoding='utf-8').strip()
     if not (Path(session) / 'home-intent.txt').exists():
         return False
     if 'uid=0' not in root_command(device, '/system/bin/id'):

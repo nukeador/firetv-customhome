@@ -1,0 +1,95 @@
+diff --git a/src/gl_profiles_embedded.h b/src/gl_profiles_embedded.h
+index 78827c3..5119f05 100644
+--- a/src/gl_profiles_embedded.h
++++ b/src/gl_profiles_embedded.h
+@@ -906,12 +906,12 @@ static const struct gl_profile gl_embedded_profiles[] = {
+     },
+     {
+         .profile_version = 2u,
+-        .target = "sheldon-PS7717.5741",
+-        .verification = "hardware-tested",
+-        .match_product = "sheldon,sheldonp",
+-        .match_model = "*",
++        .target = "sheldonp-PS7717.5746-experimental",
++        .verification = "offline-image-comparison-only",
++        .match_product = "sheldonp",
++        .match_model = "AFTSSS",
+         .match_fingerprint = "*",
+-        .match_incremental = "0036408028548",
++        .match_incremental = "0036408029828",
+         .match_kernel_release = "4.4.162+",
+         .match_machine = "armv7l",
+         .exploit_path = "configfs-mm-reclaim-v1",
+@@ -949,16 +949,16 @@ static const struct gl_profile gl_embedded_profiles[] = {
+         .stamp_socket_kind = 1u,
+         .stamp_copy_depth = 0x210u,
+         .stamp_waiter_depth = 0x1ecu,
+-        .ota_sha256 = "4a8a0d467576711cbfeee77919ad97c77afb387dbe35a60011cc89dafd211a1b",
+-        .boot_sha256 = "92016b2dd58aaf1337f9d371af4074dce167f2d55689c8ea99e5c3389225377c",
+-        .kernel_sha256 = "2a894a33482f665f4a2bed0996bcc351353f4cb6d0c08cdd57027621214809b7",
+-        .kernel_config_sha256 = "50b68a0d58cda7a37f168d1ed9be90595532baa5716692f0c2b248c2d958013c",
+-        .second_sha256 = "da135b56b9cb135892167f223e6fa966d42bbb86f6db0f24d0482d7fad55912e",
+-        .critical_anchors_sha256 = "b84ade0049877df03235cecc67759fd30d66078749eff8157f16f4d183f007e0",
+-        .reference = "sheldon-PS7717.5741N-kernel-identical-to-PS7716.5666N-hardware-verified",
++        .ota_sha256 = "62c408cb35e59ac0de30b2cd4b876ddb037a09e80d106e9ad2ee1eb0ba8412ad",
++        .boot_sha256 = "9628f4fff22a7471f28440f665a9cd920e667982f03d7e3e73660789c9928978",
++        .kernel_sha256 = "3552e95c82fb16d73a201d35673829b115b833caa448953a3f305e6f579dece5",
++        .kernel_config_sha256 = "0000000000000000000000000000000000000000000000000000000000000000",
++        .second_sha256 = "0000000000000000000000000000000000000000000000000000000000000000",
++        .critical_anchors_sha256 = "0000000000000000000000000000000000000000000000000000000000000000",
++        .reference = "5746-offline-comparison-only",
+         .kernel_image_base = 0xc0008000u,
+         .kernel_size = 16621568u,
+-        .kernel_similarity_ppm = 1000000u,
++        .kernel_similarity_ppm = 999990u,
+         .selinux_enforcing = 0xc100a850u,
+         .cred_cap_permitted_off = 0x30u,
+         .cred_cap_effective_off = 0x38u,
+diff --git a/src/gl_root.c b/src/gl_root.c
+index ac7aa2f..9fcaae0 100644
+--- a/src/gl_root.c
++++ b/src/gl_root.c
+@@ -1476,7 +1476,7 @@ int main(int argc, char **argv) {
+     if (getuid() != 0 || geteuid() != 0)
+         return 3;
+ 
+-    install_su(afd);
++    /* Home-only: do not install su. */
+ 
+     pid_t daemon = fork();
+     if (daemon < 0) {
+@@ -1500,31 +1500,15 @@ int main(int argc, char **argv) {
+     if (pc == 0) {
+         if (g_profile.selinux_enforcing)
+             kernel_set_permissive(afd, current_task);
+-        mount_su_all();
+-        disable_ota();
++        /* Home-only: do not mount su. */
++        dprintf(2, "[home-only] OTA untouched\n");
+         if (g_exec_script)
+             run_root_script(g_exec_script);
+         _exit(0);
+     }
+     (void)pc;
+ 
+-    pid_t bs = fork();
+-    if (bs == 0) {
+-        setsid();
+-        int dn = open("/dev/null", O_RDWR);
+-        if (dn >= 0) {
+-            dup2(dn, 0);
+-            dup2(dn, 1);
+-            dup2(dn, 2);
+-            if (dn > 2)
+-                close(dn);
+-        }
+-        bind_shell_server();
+-        _exit(0);
+-    }
+-    (void)bs;
+-    dprintf(2, "[bind] shell pid=%d: netcat 127.0.0.1:%d, launcher-manager 127.0.0.1:%d\n", bs,
+-            BIND_SHELL_PORT, LM_SHELL_PORT);
++    dprintf(2, "[home-only] no TCP root listener\n");
+ 
+     for (;;)
+         sleep(3600);

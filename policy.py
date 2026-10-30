@@ -21,6 +21,15 @@ def matches_identity(props, kernel, machine):
             and kernel.strip() == '4.14.87+' and machine.strip() == 'armv7l')
 
 
+def matches_sheldon_5746(props, kernel, machine):
+    return (props.get('ro.product.model') == 'AFTSSS'
+            and props.get('ro.product.device') == 'sheldonp'
+            and props.get('ro.build.version.incremental') == '0036408029828'
+            and props.get('ro.build.version.sdk') == '28'
+            and props.get('ro.product.cpu.abi') == 'armeabi-v7a'
+            and kernel.strip() == '4.4.162+' and machine.strip() == 'armv7l')
+
+
 def parse_getprop(text):
     return dict(re.findall(r'^\[([^]]+)\]: \[([^]]*)\]$', text, re.M))
 

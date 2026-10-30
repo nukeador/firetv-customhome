@@ -65,3 +65,18 @@ def reconstruct(patch_path, output):
         raise ValueError('Reconstructed helper SHA-256 mismatch')
     Path(output).write_bytes(result)
     return Path(output)
+
+
+def reconstruct_sheldon(patch_path, output):
+    url = 'https://github.com/nukeador/firetv-customhome/releases/download/0.1.12/ghostlock-sheldon-1.1.0-original-arm'
+    original = request(url, 4 * 1024 * 1024)
+    patch = Path(patch_path).read_bytes()
+    if hashlib.sha256(original).hexdigest() != 'e6c5afb143ebf03114b941b1298b0d8b9b7d156071d6d37deb4fdcb09fbd1b32':
+        raise ValueError('Original GhostLock SHA-256 mismatch')
+    if hashlib.sha256(patch).hexdigest() != 'dcff3d3af2f695f3b0c1a668094a27682ae28e577e9852ca948792e6f45bd75d':
+        raise ValueError('Sheldon patch SHA-256 mismatch')
+    result = apply_patch(original, patch)
+    if hashlib.sha256(result).hexdigest() != '7db65c5570309b20f6664cf48ed2d141ae9d0a42a2ed35035d79662269d96ff2':
+        raise ValueError('Reconstructed Sheldon helper SHA-256 mismatch')
+    Path(output).write_bytes(result)
+    return Path(output)

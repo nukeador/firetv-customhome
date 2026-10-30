@@ -19,7 +19,7 @@ from device import Device, packages
 from downloads import fetch
 import home
 import rootpatch
-from policy import APPS, CONTENT, METRICS, matches_identity, parse_getprop
+from policy import APPS, CONTENT, METRICS, matches_identity, matches_sheldon_5746, parse_getprop
 
 ASSETS = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent)) / 'assets'
 STATE = Path(os.environ.get('LOCALAPPDATA') or os.environ.get('XDG_STATE_HOME') or Path.home() / '.local' / 'state') / 'firetv-customhome'
@@ -312,6 +312,7 @@ def main():
         apk = asset('tvhome.apk')
         asset('smarttube-marker.apk')
         asset('kara-home-only.bsdiff')
+        asset('sheldonp-5746-home-only.bsdiff')
         check_apk(apk, 'com.gathin.tvhome', 28, {'armeabi-v7a'})
         verify_signature(apk, '0c379f3f3b049fa37be14f1e4045b83728cddaa7976804af787fc4e39030c70d')
         print(t('Comprobación local correcta; no se ha conectado a ninguna TV.',
@@ -373,12 +374,13 @@ def main():
                         raise
                     print(t('El root temporal ya no está activo. Restaurar Home requiere un nuevo intento, que puede colgar o reiniciar la TV.',
                             'Temporary root is no longer active. Restoring Home needs another attempt, which may freeze or restart the TV.'))
-                    if not matches_identity(props, kernel, machine):
+                    sheldon = matches_sheldon_5746(props, kernel, machine)
+                    if not sheldon and not matches_identity(props, kernel, machine):
                         raise RuntimeError('Cannot safely obtain root on this firmware')
                     if not ask('¿Has comprobado que no hay una actualización pendiente y quieres preparar la restauración?',
                                'Have you checked that no update is pending and want to prepare restoration?'):
                         raise RuntimeError('Home restoration cancelled')
-                    helper = rootpatch.reconstruct(asset('kara-home-only.bsdiff'), session / 'kara-home-only.arm')
+                    helper = (rootpatch.reconstruct_sheldon(asset('sheldonp-5746-home-only.bsdiff'), session / 'sheldon-home-only.arm') if sheldon else rootpatch.reconstruct(asset('kara-home-only.bsdiff'), session / 'kara-home-only.arm'))
                     print(t('Se hará un único intento. Escribe ROOT para aceptar el riesgo.',
                             'One attempt will be made. Type ROOT to accept the risk.'))
                     if input('ROOT: ').strip() != 'ROOT':
@@ -482,9 +484,10 @@ def main():
         current_home = device.shell('cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME')
         if home.HOME in current_home:
             print(t('El launcher ya es Home; no se ejecutará root.', 'The launcher is already Home; root will not be run.'))
-        elif mode in ('setup', 'home') and launcher_installed and matches_identity(props, kernel, machine):
-            print(t('Este firmware coincide con el dispositivo probado. El root temporal puede colgar o reiniciar el Fire TV; para restaurar Home después puede ser necesario repetirlo.',
-                    'This firmware matches the tested device. Temporary root can freeze or reboot the Fire TV; restoring Home later may require repeating it.'))
+        elif mode in ('setup', 'home') and launcher_installed and (matches_identity(props, kernel, machine) or matches_sheldon_5746(props, kernel, machine)):
+            sheldon = matches_sheldon_5746(props, kernel, machine)
+            print(t('Cambio experimental en 5746: no probado en un Fire TV real.' if sheldon else 'Firmware compatible con el perfil revisado.', 'Experimental 5746 change: not tested on a real Fire TV.' if sheldon else 'Firmware matches the reviewed profile.'))
+            print(t('El root temporal puede colgar o reiniciar el Fire TV; restaurar Home después puede requerir repetirlo.', 'Temporary root can freeze or reboot the Fire TV; restoring Home later may require repeating it.'))
             print(t('Comprueba en la TV que el launcher y Ajustes funcionan y que no hay una actualización pendiente de instalar.',
                     'On the TV, check that the launcher and Settings work and no update is waiting to install.'))
             if ask('¿Quieres preparar el cambio del botón Home?', 'Prepare the Home button change?'):
@@ -492,7 +495,7 @@ def main():
                            'Have you checked the launcher, Settings, and that no update is pending?'):
                     raise RuntimeError(t('Cambio de Home cancelado.', 'Home change cancelled.'))
                 print(t('Descargando GhostLock y aplicando el parche verificado…', 'Downloading GhostLock and applying the verified patch…'))
-                helper = rootpatch.reconstruct(asset('kara-home-only.bsdiff'), session / 'kara-home-only.arm')
+                helper = (rootpatch.reconstruct_sheldon(asset('sheldonp-5746-home-only.bsdiff'), session / 'sheldon-home-only.arm') if sheldon else rootpatch.reconstruct(asset('kara-home-only.bsdiff'), session / 'kara-home-only.arm'))
                 print(t('Un solo intento; no se desactivarán las actualizaciones. Escribe ROOT para aceptar el riesgo.',
                         'One attempt only; updates will not be disabled. Type ROOT to accept the risk.'))
                 if input('ROOT: ').strip() == 'ROOT':
