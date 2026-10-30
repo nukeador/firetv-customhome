@@ -4,13 +4,13 @@ Una pantalla de inicio sencilla para Fire TV, con «Seguir viendo» de Stremio, 
 
 **[English](README.md)** · **[Descargar el instalador](https://github.com/nukeador/firetv-customhome/releases)**
 
-> **Versión preliminar:** la instalación y la recuperación completas aún no se han probado en un segundo Fire TV. Cambiar el botón Inicio puede colgar o reiniciar el dispositivo. Sigue las instrucciones del instalador y conserva la copia que crea.
+> Probado en **Fire TV Stick 4K Max (primera generación)** y **Fire TV Stick (tercera generación)** con versiones de software compatibles. Cambiar el botón Inicio puede colgar o reiniciar el dispositivo. Sigue las instrucciones del instalador y conserva la copia que crea.
 
 ![Pantalla de inicio con Seguir viendo, aplicaciones favoritas y recomendaciones de SmartTube](docs/images/home.png)
 
 ## Instalación
 
-1. Descarga la última versión preliminar desde la [página de versiones](https://github.com/nukeador/firetv-customhome/releases). Elige Windows, macOS con Apple Silicon o Linux y descomprime el archivo.
+1. Descarga la última versión desde la [página de versiones](https://github.com/nukeador/firetv-customhome/releases). Elige Windows, macOS con Apple Silicon o Linux y descomprime el archivo.
 2. Conecta el ordenador y el Fire TV a la misma red.
 3. En el Fire TV, entra en **Ajustes → Mi Fire TV → Acerca de** y pulsa siete veces el nombre del dispositivo. Vuelve atrás, abre **Opciones para desarrolladores** y activa **Depuración ADB**. Busca la dirección IP del Fire TV en **Acerca de → Red**.
 4. Abre la carpeta descomprimida e inicia el instalador:

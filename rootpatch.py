@@ -68,7 +68,7 @@ def reconstruct(patch_path, output):
 
 
 def reconstruct_sheldon(patch_path, output):
-    url = 'https://github.com/nukeador/firetv-customhome/releases/download/0.1.12/ghostlock-sheldon-1.1.0-original-arm'
+    url = 'https://github.com/nukeador/firetv-customhome/releases/latest/download/ghostlock-sheldon-1.1.0-original-arm'
     original = request(url, 4 * 1024 * 1024)
     patch = Path(patch_path).read_bytes()
     if hashlib.sha256(original).hexdigest() != 'e6c5afb143ebf03114b941b1298b0d8b9b7d156071d6d37deb4fdcb09fbd1b32':

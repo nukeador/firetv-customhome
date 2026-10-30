@@ -55,4 +55,8 @@ jobs:
           else
             release_tag="0.1.$GITHUB_RUN_NUMBER"
           fi
-          gh release create "$release_tag" release-files/*.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$release_tag" --notes "Early preview: the Home takeover and recovery need real-device end-to-end testing. See README and LEEME.es.md."
+          helper="ghostlock-sheldon-1.1.0-original-arm"
+          curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/$helper" -o "$helper" || \
+            curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/0.1.17/$helper" -o "$helper"
+          echo "e6c5afb143ebf03114b941b1298b0d8b9b7d156071d6d37deb4fdcb09fbd1b32  $helper" | sha256sum -c -
+          gh release create "$release_tag" release-files/*.zip "$helper" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$release_tag" --notes "See README and LEEME.es.md for setup and supported devices."

@@ -1,6 +1,6 @@
 # Fire TV Stick 3rd generation: PS7717.5746N research
 
-Status: experimental; physical-device takeover and recovery have not yet been tested.
+Status: the user reported that Home takeover worked on a physical 5746 device; recovery has not been independently verified.
 
 The public full firmware packages for sheldonp builds 5741 and 5746 were examined offline. Their SHA-256 hashes are respectively `6d04501e8f85afdef401ee50ea9d1a0482caac87a8084f7644453081ea714b4e` and `62c408cb35e59ac0de30b2cd4b876ddb037a09e80d106e9ad2ee1eb0ba8412ad`. The boot images were extracted and each ARM zImage was decompressed. Both decompressed images are 16,621,568 bytes, with 164 byte differences in six regions; several reflect build metadata. The SHA-256 hashes of the decompressed images are `e7976319600064bd908df494b5cda40d58eccfbddf54cf43e2951223d4466518` and `3552e95c82fb16d73a201d35673829b115b833caa448953a3f305e6f579dece5`.
 
@@ -14,4 +14,4 @@ Sources: [GhostLock 4.4](https://github.com/R0rt1z2/GhostLock/tree/4.4), [5741 f
 
 The separate `ghostlock-sheldon-1.1.0-original-arm` release asset is built from upstream revision `57ed5a41809bf0e3c1b06388e5cdff77c2e6b89d` using Android NDK r27d and the flags in its Makefile. Its SHA-256 is `e6c5afb143ebf03114b941b1298b0d8b9b7d156071d6d37deb4fdcb09fbd1b32`. The installer downloads that original asset and applies `assets/sheldonp-5746-home-only.bsdiff`; the corresponding human-readable changes are in `sheldonp-5746-experimental.patch`. The result SHA-256 is `7db65c5570309b20f6664cf48ed2d141ae9d0a42a2ed35035d79662269d96ff2`. No helper binary is included in the installer ZIPs.
 
-The patch changes the exact profile match, removes the OTA disable/clear calls, avoids mounting su and disables the extra TCP listeners. The root daemon and temporarily permissive SELinux remain active until reboot. The device-specific flow is experimental: only offline image comparison and simulated Home/restore checks were run; no physical sheldonp 5746 takeover or recovery has been tested. The original code's runtime validation occurs only after the kernel primitive begins, so it cannot guarantee the absence of a hang or other failure.
+The patch changes the exact profile match, removes the OTA disable/clear calls, avoids mounting su and disables the extra TCP listeners. The root daemon and temporarily permissive SELinux remain active until reboot. The device-specific flow is experimental: offline image comparison and simulated Home/restore checks were run; the user reported a successful physical sheldonp 5746 Home takeover, while recovery remains unverified. The original code's runtime validation occurs only after the kernel primitive begins, so it cannot guarantee the absence of a hang or other failure.

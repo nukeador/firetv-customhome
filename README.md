@@ -4,13 +4,13 @@ A simple Fire TV home screen with Stremio’s Continue Watching, SmartTube recom
 
 **[Español](LEEME.es.md)** · **[Download the installer](https://github.com/nukeador/firetv-customhome/releases)**
 
-> **Preview:** The full installation and recovery have not yet been tested on a second Fire TV. Changing the Home button can restart or freeze the device. Follow the instructions shown by the installer and keep the backup it creates.
+> Tested with **Fire TV Stick 4K Max (1st generation)** and **Fire TV Stick (3rd generation)** on supported software versions. Changing the Home button can restart or freeze the device. Follow the installer and keep its backup.
 
 ![Fire TV home screen with Continue Watching, favorite apps and SmartTube recommendations](docs/images/home.png)
 
 ## Install
 
-1. Download the latest preview from the [releases page](https://github.com/nukeador/firetv-customhome/releases). Choose Windows, macOS with Apple Silicon, or Linux, and unzip the file.
+1. Download the latest version from the [releases page](https://github.com/nukeador/firetv-customhome/releases). Choose Windows, macOS with Apple Silicon, or Linux, and unzip the file.
 2. Connect your computer and Fire TV to the same network.
 3. On the Fire TV, open **Settings → My Fire TV → About** and press the device name seven times. Go back, open **Developer options**, and turn on **ADB debugging**. Find the Fire TV’s IP address in **About → Network**.
 4. Open the extracted folder and start the installer:
