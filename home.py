@@ -62,15 +62,22 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
         live_started = True
         (Path(session) / 'root-attempt.txt').write_text('One live attempt started. Restart the Fire TV to end temporary root.\n', encoding='utf-8')
         if sheldon:
-            device.shell('nohup ' + remote + ' --tries 1 >>' + log_path + ' 2>&1 </dev/null &', timeout=30)
+            print('Iniciando GhostLock / Starting GhostLock…', flush=True)
+            start_output = device.shell('(nohup ' + remote + ' --tries 1 >>' + log_path + ' 2>&1 </dev/null &); sleep 1', timeout=30)
+            (Path(session) / 'root-start.txt').write_text(start_output, encoding='utf-8')
+            print('Esperando resultado / Waiting for result…', flush=True)
         else:
             device.shell('nohup ' + remote + ' --live RUN-KARA-PS7713-HOME-ONLY-V2 >/data/local/tmp/kara-home-only-start.log 2>&1 </dev/null; sleep 5', timeout=120)
         deadline = time.monotonic() + (120 if sheldon else 45)
         log = ''
+        last_report = time.monotonic()
         while time.monotonic() < deadline:
             log = device.shell('cat ' + log_path, timeout=30)
             new_log = log[len(old_log):] if log.startswith(old_log) else ''
-            if ('[ROOT] uid=0 daemon' in new_log and '[home-only] OTA untouched' in new_log) if sheldon else ('ROOT DAEMON READY' in new_log or 'reclaim preparation failed' in new_log):
+            if sheldon and time.monotonic() - last_report >= 15:
+                print('GhostLock: ' + (new_log.strip().splitlines()[-1][:180] if new_log.strip() else 'esperando registro / waiting for log'), flush=True)
+                last_report = time.monotonic()
+            if ('[ROOT] uid=0 daemon' in new_log and '[home-only] OTA untouched' in new_log or 'holding reclaim' in new_log or 'preloaded read slot failed' in new_log or 'profile rejected' in new_log) if sheldon else ('ROOT DAEMON READY' in new_log or 'reclaim preparation failed' in new_log):
                 break
             time.sleep(2)
         (Path(session) / 'root-result.txt').write_text(log, encoding='utf-8')

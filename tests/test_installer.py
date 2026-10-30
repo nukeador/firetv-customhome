@@ -214,7 +214,7 @@ class Tests(unittest.TestCase):
                     if 'pm default-state' in cmd: self.starter=False
                     if 'set-home-activity' in cmd: self.resolved='com.amazon.tv.launcher/.ui.HomeActivity_vNext' if 'com.amazon.tv.launcher/' in cmd else home.HOME
                     return 'ok'
-                if cmd.startswith('nohup '): self.live=True; return ''
+                if cmd.startswith('(nohup '): self.live=True; return ''
                 if cmd.startswith('cat /data/local/tmp/sheldon-home-only.log'): return '[ROOT] uid=0 daemon\n[home-only] OTA untouched\n' if self.live else ''
                 if cmd == 'pm list packages -d': return 'package:com.amazon.firehomestarter' if self.starter else ''
                 if cmd.startswith('cmd package resolve-activity'): return self.resolved
