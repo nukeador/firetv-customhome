@@ -1,0 +1,7 @@
+# Fire OS update preference
+
+The installer offers an explicit choice to block OS update packages after Home takeover and a separate menu action to block or enable them later. It does not claim to prevent every future Amazon change. Blocking updates also blocks security fixes. Enabling updates can install newer firmware that changes Home or breaks the root method.
+
+Only the two exact reviewed Fire OS builds can use temporary root. The action snapshots the current user-0 package states and logs intended changes locally before making them. It changes only installed update packages, checks the disabled-package list after each change, attempts to restore the prior state if a partial operation fails, and reports any unverified rollback. It does not clear package data, alter update settings, or remove staged payloads. A previously staged update can remain pending; package state alone does not prove it cannot install. Reboot and verify the settings and Home as prompted; another root attempt may be needed to change the preference later.
+
+The supported update package set is `com.amazon.device.software.ota`, `com.amazon.device.software.ota.override` and `com.amazon.tv.forcedotaupdater.v2` when installed. Package names and permission behavior are firmware-specific; refusals stop the operation. The update service itself must be present. Automated tests cover simulated block, enable, partial refusal and rollback; this workflow has not yet been validated on a physical device.

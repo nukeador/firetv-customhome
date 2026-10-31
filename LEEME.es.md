@@ -22,6 +22,8 @@ Una pantalla de inicio sencilla para Fire TV, con «Seguir viendo» de Stremio, 
 
 Elige **Limpiar aplicaciones de Amazon** en el menú para hacer solo la limpieza. En el Stick de tercera generación, esta opción aún no se ha probado en un dispositivo real.
 
+El instalador puede bloquear las actualizaciones de Fire OS para reducir el riesgo de perder el Inicio personalizado. Puedes volver a activarlas desde **Bloquear o activar actualizaciones** en el menú. Bloquearlas también impide recibir correcciones de seguridad y no garantiza que Inicio persista.
+
 Puedes volver a ejecutar el instalador si quedó a medias: muestra lo que ya está instalado y permite elegir cada paso. El puente de SmartTube se puede instalar antes que SmartTube.
 
 Mantén pulsado **OK** sobre una aplicación para cambiarla de sitio. Pulsa **Menú** sobre ella para abrir sus ajustes. Se conservan la configuración y el orden de un launcher ya instalado; en una instalación nueva puedes ordenar las aplicaciones a tu gusto.

@@ -19,6 +19,7 @@ from device import Device, packages
 from downloads import fetch
 import home
 import rootpatch
+import updates
 from policy import (APPS, CONTENT, METRICS, SHELDON_METRICS, SHELDON_CONTENT,
                     SHELDON_FACTORY_VERSION, matches_identity, matches_sheldon_5746, parse_getprop)
 
@@ -343,6 +344,69 @@ def finish_adb(device, host, port, wired):
         print(t('ADB se deja activado.', 'ADB debugging remains enabled.'))
 
 
+def apply_update_choice(device, session, block):
+    states = updates.set_updates(device, session, block)
+    print(t('Actualizaciones bloqueadas.' if block else 'Actualizaciones activadas.',
+            'System updates blocked.' if block else 'System updates enabled.'))
+    if block:
+        print(t('Una actualización ya descargada puede seguir pendiente; el bloqueo no garantiza que Inicio persista.',
+                'An already staged update may remain pending; blocking is not a guarantee that Home persists.'))
+    return states
+
+
+def run_updates_maintenance(device, props, kernel, machine, session, host, port, wired, block=None):
+    sheldon = matches_sheldon_5746(props, kernel, machine)
+    if not sheldon and not matches_identity(props, kernel, machine):
+        raise RuntimeError(t('Este firmware no tiene un método de root revisado.', 'No reviewed root method for this firmware.'))
+    current = updates.snapshot(device)
+    disabled_count = sum(item['disabled'] for item in current.values())
+    status = t('bloqueadas', 'blocked') if disabled_count == len(current) else t('activas', 'enabled') if disabled_count == 0 else t('bloqueo parcial', 'partly blocked')
+    print(t('Estado de los servicios de actualización: ', 'Update service state: ') + status)
+    if block is None:
+        choice = choose_menu(t('Actualizaciones de Fire OS:', 'Fire OS updates:'),
+            [t('Bloquear (recomendado para conservar Inicio)', 'Block (recommended to protect Home)'),
+             t('Volver a activarlas', 'Enable updates again'), t('Cancelar', 'Cancel')])
+        if choice == 2: return
+        block = choice == 0
+    if all(item['disabled'] == block for item in current.values()):
+        print(t('Ya estaban en el estado elegido; no se necesita root.', 'Already in the selected state; root is not needed.'))
+        return
+    print(t('Bloquearlas también impide recibir correcciones de seguridad; activarlas puede cambiar Inicio.',
+            'Blocking also prevents security fixes; enabling updates may change Home.'))
+    print(t('Una actualización ya descargada puede seguir pendiente. No se borrarán sus datos.',
+            'A staged update may remain pending. Its data will not be deleted.'))
+    if not ask('¿Continuar?', 'Continue?'): return
+    print(t('Puede ser necesario un intento de root temporal, con riesgo de cuelgue o reinicio.',
+            'A temporary root attempt may be needed; it can freeze or reboot the Fire TV.'))
+    if input(t('Escribe ROOT para continuar: ', 'Type ROOT to continue: ')).strip() != 'ROOT': return
+    helper = (rootpatch.reconstruct_sheldon(asset('sheldonp-5746-home-only.bsdiff'), session / 'sheldon-home-only.arm') if sheldon else rootpatch.reconstruct(asset('kara-home-only.bsdiff'), session / 'kara-home-only.arm'))
+    home.apply(device, props, kernel, machine, helper, session, True,
+               on_root=lambda rooted: apply_update_choice(rooted, session, block), maintenance_only=True)
+    print(t('Reinicia el Fire TV con el mando para cerrar el root temporal.',
+            'Restart the Fire TV with the remote to end temporary root.'))
+    input(t('Cuando vuelva a Inicio, pulsa Intro para comprobar: ', 'When Home returns, press Enter to verify: '))
+    device.close()
+    check = Device(host, port, STATE / 'keys')
+    try:
+        check.connect()
+        old_boot = (session / 'boot-id.txt').read_text(encoding='utf-8').strip()
+        if old_boot == check.shell('cat /proc/sys/kernel/random/boot_id').strip():
+            raise RuntimeError('Reboot was not confirmed')
+        if check.shell('getenforce').strip() != 'Enforcing':
+            raise RuntimeError('SELinux enforcing state not confirmed after reboot')
+        states = updates.snapshot(check)
+        if any(item['disabled'] != block for item in states.values()):
+            print(t('El estado de las actualizaciones cambió tras reiniciar; revísalo en el menú.',
+                    'The update state changed after reboot; check it in the menu.'))
+        else:
+            print(t('Estado de actualizaciones verificado tras reiniciar.', 'Update state verified after reboot.'))
+        try: check.screenshot(session / 'updates-after-reboot.png')
+        except Exception as error: print(str(error))
+        finish_adb(check, host, port, wired)
+    finally:
+        check.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description='firetv-customhome')
     parser.add_argument('--restore', metavar='BACKUP')
@@ -358,12 +422,13 @@ def main():
         print(t('Comprobación local correcta; no se ha conectado a ninguna TV.',
                 'Local self-check passed; no TV connection was made.'))
         return
-    mode = 'restore' if args.restore else ('setup', 'components', 'cleanup', 'home', 'restore', 'diagnose', 'quit')[choose_menu(
+    mode = 'restore' if args.restore else ('setup', 'components', 'cleanup', 'home', 'updates', 'restore', 'diagnose', 'quit')[choose_menu(
         t('¿Qué quieres hacer?', 'What would you like to do?'),
         [t('Instalar desde cero o continuar', 'Install or continue setup'),
          t('Instalar solo componentes concretos', 'Install selected components'),
          t('Limpiar aplicaciones de Amazon', 'Clean up Amazon apps'),
          t('Cambiar el botón Inicio', 'Change the Home button'),
+         t('Bloquear o activar actualizaciones', 'Block or enable system updates'),
          t('Restaurar una limpieza anterior', 'Restore a previous cleanup'),
          t('Comprobar compatibilidad', 'Check compatibility'), t('Salir', 'Exit')])]
     if mode == 'quit': return
@@ -459,6 +524,9 @@ def main():
         sdk = int(props.get('ro.build.version.sdk', '0'))
         abi = props.get('ro.product.cpu.abi', '')
         abis = {item.strip() for item in props.get('ro.product.cpu.abilist', abi).split(',') if item.strip()}
+        if mode == 'updates':
+            run_updates_maintenance(device, props, kernel, machine, session, host, port, wired)
+            return
         if usque_only:
             if abi not in ('armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'):
                 raise RuntimeError(t('Arquitectura no compatible con Usque.', 'Unsupported Usque architecture.'))
@@ -521,9 +589,20 @@ def main():
         if mode in ('setup', 'cleanup'):
             select_cleanup(device, props, kernel, machine, session)
         home_changed = False
+        supported_home = matches_identity(props, kernel, machine) or matches_sheldon_5746(props, kernel, machine)
+        block_updates = False
+        if mode in ('setup', 'home') and launcher_installed and supported_home:
+            print(t('Recomendado para proteger Inicio: bloquear actualizaciones de Fire OS. No es una garantía y también bloquea correcciones de seguridad.',
+                    'Recommended to protect Home: block Fire OS updates. This is not a guarantee and also blocks security fixes.'))
+            print(t('Puedes activarlas de nuevo desde el menú. Una actualización ya descargada puede seguir pendiente.',
+                    'You can enable them again from the menu. An already staged update may remain pending.'))
+            block_updates = ask('¿Bloquear actualizaciones de Fire OS?', 'Block Fire OS updates?')
         current_home = device.shell('cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME')
         if home.HOME in current_home:
-            print(t('El launcher ya es Home; no se ejecutará root.', 'The launcher is already Home; root will not be run.'))
+            print(t('El launcher ya es Home.', 'The launcher is already Home.'))
+            if block_updates:
+                run_updates_maintenance(device, props, kernel, machine, session, host, port, wired, block=True)
+                return
         elif mode in ('setup', 'home') and launcher_installed and (matches_identity(props, kernel, machine) or matches_sheldon_5746(props, kernel, machine)):
             sheldon = matches_sheldon_5746(props, kernel, machine)
             print(t('Cambio experimental en 5746: no probado en un Fire TV real.' if sheldon else 'Firmware compatible con el perfil revisado.', 'Experimental 5746 change: not tested on a real Fire TV.' if sheldon else 'Firmware matches the reviewed profile.'))
@@ -546,7 +625,8 @@ def main():
                             print(t('Captura no disponible: ', 'Screenshot unavailable: ') + str(error))
                         if not ask('¿Se ve bien la TV y continuamos?', 'Does the TV look OK; continue?', default=True):
                             raise RuntimeError(t('Detenido por el usuario.', 'Stopped by the user.'))
-                    home_changed = home.apply(device, props, kernel, machine, helper, session, True, review_step) == 'changed'
+                    callback = (lambda rooted: apply_update_choice(rooted, session, True)) if block_updates else None
+                    home_changed = home.apply(device, props, kernel, machine, helper, session, True, review_step, on_root=callback) == 'changed'
                     if home_changed:
                         print(t('Comprueba con el botón Home físico desde otra aplicación.', 'Test the physical Home button from another app.'))
                         if not ask('¿Abre el launcher nuevo?', 'Does it open the new launcher?'):

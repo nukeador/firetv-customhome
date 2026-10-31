@@ -18,7 +18,7 @@ def root_command(device, command):
     return device.shell(REMOTE + ' --cmd ' + shlex.quote(command), timeout=120)
 
 
-def apply(device, props, kernel, machine, root_asset, session, confirm, review_step=None, restore_only=False):
+def apply(device, props, kernel, machine, root_asset, session, confirm, review_step=None, restore_only=False, on_root=None, maintenance_only=False):
     sheldon = matches_sheldon_5746(props, kernel, machine)
     if not sheldon and not matches_identity(props, kernel, machine):
         raise RuntimeError('Firmware not verified; root is unavailable on this device')
@@ -41,10 +41,11 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
         raise RuntimeError('Expected ADB shell and SELinux state were not confirmed')
     launcher_before = device.shell('dumpsys package com.amazon.tv.launcher')
     starter_before = device.shell('dumpsys package com.amazon.firehomestarter')
-    expected_home = disabled_home_component(launcher_before) if restore_only else enabled_home_component(launcher_before)
-    expected_starter = '3' if restore_only else '0'
-    if not expected_home or not __import__('re').search(r'User 0:.*\benabled=' + expected_starter + r'\b', starter_before):
-        raise RuntimeError('Original Home component or starter state differs; stop')
+    if not maintenance_only:
+        expected_home = disabled_home_component(launcher_before) if restore_only else enabled_home_component(launcher_before)
+        expected_starter = '3' if restore_only else '0'
+        if not expected_home or not __import__('re').search(r'User 0:.*\benabled=' + expected_starter + r'\b', starter_before):
+            raise RuntimeError('Original Home component or starter state differs; stop')
     if reuse_root:
         remote_hash = device.shell('md5sum ' + remote).split()
         if not remote_hash or remote_hash[0] != hashlib.md5(root_asset.read_bytes()).hexdigest():
@@ -103,10 +104,15 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
             raise RuntimeError('Temporary SELinux state was not confirmed; Home was not changed')
         ota = root_command(device, 'if [ -n "$(ls -A /data/ota_package 2>/dev/null)" ] || [ -e /cache/recovery/command ] || [ -e /cache/recovery/block.map ]; then echo PENDING; else echo CLEAR; fi')
         (Path(session) / 'ota-check.txt').write_text(ota, encoding='utf-8')
-        if not sheldon and ('CLEAR' not in ota or 'PENDING' in ota):
+        if not sheldon and not maintenance_only and ('CLEAR' not in ota or 'PENDING' in ota):
             raise RuntimeError('Pending update state is not clear; Home was not changed')
         if sheldon and ('CLEAR' not in ota or 'PENDING' in ota):
             print('Estado de actualización no confirmado; se conserva y se continúa. / Update state unconfirmed; leaving it untouched and continuing.', flush=True)
+        if maintenance_only:
+            if on_root is None:
+                raise RuntimeError('Maintenance action missing')
+            on_root(device)
+            return 'maintenance'
         if restore_only:
             restore_home(device, session)
             (Path(session) / 'home-restored.txt').write_text('Amazon Home restored and resolved.\n', encoding='utf-8')
@@ -142,6 +148,12 @@ def apply(device, props, kernel, machine, root_asset, session, confirm, review_s
             raise RuntimeError('Focused Home activity could not be verified; stop and restore Home')
         if review_step:
             review_step('home-result.png')
+        if on_root is not None:
+            try:
+                on_root(device)
+            except Exception as update_error:
+                (Path(session) / 'updates-error.txt').write_text(str(update_error), encoding='utf-8')
+                print('No se pudo cambiar las actualizaciones / Could not change updates: ' + str(update_error), flush=True)
         return 'changed'
     except Exception as error:
         if mutation_started and not restore_only:

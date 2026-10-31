@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix='firetv-release-') as temp:
     for name in ('README.md', 'LEEME.es.md', 'PRIVACY.md', 'LICENSE'):
         shutil.copy2(ROOT / name, folder / name)
     (folder / 'docs').mkdir()
-    for name in ('GHOSTLOCK-PROVENANCE.md', 'home-only-source.patch', 'DEVELOPMENT.md', 'THIRD-PARTY-NOTICES.md'):
+    for name in ('GHOSTLOCK-PROVENANCE.md', 'home-only-source.patch', 'DEVELOPMENT.md', 'THIRD-PARTY-NOTICES.md', 'UPDATES.md'):
         shutil.copy2(ROOT / 'docs' / name, folder / 'docs' / name)
     (folder / 'docs' / 'images').mkdir()
     shutil.copy2(ROOT / 'docs' / 'images' / 'home.png', folder / 'docs' / 'images' / 'home.png')

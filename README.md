@@ -22,6 +22,8 @@ A simple Fire TV home screen with Stremio’s Continue Watching, SmartTube recom
 
 Choose **Clean up Amazon apps** from the menu to run cleanup on its own. On the third-generation Stick, this option has not yet been tested on a physical device.
 
+The installer can block Fire OS updates to reduce the chance of losing your custom Home. You can enable them again from **Block or enable system updates** in the menu. Blocking also prevents security fixes and cannot guarantee Home will persist.
+
 You can run the installer again after an interruption: it shows what is already installed and lets you choose each step. The SmartTube bridge can be installed before SmartTube.
 
 Hold **OK** on an app to rearrange it. Press **Menu** on an app to open its settings. Existing launcher settings and app order are preserved; on a new installation you can arrange the apps yourself.

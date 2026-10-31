@@ -14,6 +14,7 @@ import device
 import home
 import policy
 import rootpatch
+import updates
 
 
 class FakeDevice:
@@ -316,6 +317,13 @@ class Tests(unittest.TestCase):
             self.assertFalse(any('--tries 1' in call for call in existing.calls))
             self.assertTrue(existing.activity)
             self.assertEqual((second_session / 'ota-check.txt').read_text(), 'PENDING')
+            callback_calls = []
+            maintenance_session = Path(directory) / 'maintenance'; maintenance_session.mkdir()
+            with patch.object(home, 'SHELDON_SHA256', hashlib.sha256(b'test helper').hexdigest()):
+                self.assertEqual(home.apply(existing, props, '4.4.162+', 'armv7l', helper, maintenance_session, True,
+                                            on_root=lambda d: callback_calls.append(d), maintenance_only=True), 'maintenance')
+            self.assertEqual(callback_calls, [existing])
+            self.assertFalse((maintenance_session / 'home-intent.txt').exists())
 
     def test_sheldon_reconstruction_and_download_authenticity(self):
         original = Path('/private/tmp/firetv-ghostlock-official/build/ghostlock_root')
@@ -325,6 +333,37 @@ class Tests(unittest.TestCase):
             with patch.object(rootpatch, 'request', return_value=original.read_bytes()):
                 result = rootpatch.reconstruct_sheldon(Path('assets/sheldonp-5746-home-only.bsdiff'), Path(directory) / 'helper')
             self.assertEqual(hashlib.sha256(result.read_bytes()).hexdigest(), home.SHELDON_SHA256)
+
+    def test_updates_block_enable_and_rollback(self):
+        class UpdateDevice:
+            def __init__(self):
+                self.values = {updates.OTA: 0, 'com.amazon.device.software.ota.override': 0}
+                self.calls = []; self.refuse = None
+            def shell(self, command, timeout=60):
+                if command == 'pm list packages -u': return ''.join('package:'+p+'\n' for p in self.values)
+                if command == 'pm list packages -d': return ''.join('package:'+p+'\n' for p, v in self.values.items() if v in (2,3,4))
+                if command.startswith('dumpsys package '): return '  User 0: installed=true enabled=' + str(self.values[command.split()[-1]]) + '\n'
+                return ''
+            def root(self, command):
+                self.calls.append(command)
+                if command == '/system/bin/id': return 'uid=0(root)'
+                action, package = command.split()[-4], command.split()[-1]
+                if package == self.refuse and action == 'disable-user': return 'SecurityException: protected'
+                self.values[package] = {'disable-user':3,'enable':1,'default-state':0,'disable':2,'disable-until-used':4}[action]
+                return 'ok'
+        with tempfile.TemporaryDirectory() as directory:
+            dev=UpdateDevice()
+            with patch.object(updates, 'root_command', side_effect=lambda d,c:d.root(c)):
+                updates.set_updates(dev, directory, True)
+                self.assertEqual(set(dev.values.values()), {3})
+                updates.set_updates(dev, directory, False)
+                self.assertEqual(set(dev.values.values()), {1})
+                self.assertFalse(any('pm clear' in c for c in dev.calls))
+                dev.values={key:0 for key in dev.values}
+                dev.refuse='com.amazon.device.software.ota.override'
+                with self.assertRaises(RuntimeError): updates.set_updates(dev, directory, True)
+                self.assertEqual(set(dev.values.values()), {0})
+                self.assertEqual(json.loads((Path(directory)/'updates.json').read_text())['status'], 'rolled_back')
 
     def test_binary_patch_and_hash(self):
         def n(x):
